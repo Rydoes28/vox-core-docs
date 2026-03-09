@@ -1,7 +1,13 @@
-# vox-core-docs
+# VoxSpeak Documentation
 
-## License
+This directory contains the formal specifications and engineering documents for the VoxSpeak TTS subsystem in VoxCore.
 
-This repository is published for reference and viewing only.
+## Specifications
 
-All rights are reserved. No permission is granted to use, modify, or redistribute the code without explicit written permission.
+These documents define the contracts and design for VoxSpeak.
+
+1. [Functional Requirements](public-docs/specifications/01_functional_requirements.md)
+2. [Architecture](public-docs/specifications/02_architecture.md)
+3. [API Specification](public-docs/specifications/03_api_specification.md)
+4. [Transport Specification](public-docs/specifications/04_transport_specification.md)
+5. [Protobuf Schema](public-docs/specifications/05_protobuf_schema.md)
