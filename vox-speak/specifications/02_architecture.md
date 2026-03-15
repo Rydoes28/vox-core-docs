@@ -1,20 +1,20 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## Architecture Specification, Version 1.3 (Approved)
+## Architecture Specification, Version 1.4 (Approved)
 
-**Document ID:** VoxSpeak-ARCH-v1.3
-**Derived from:** VoxSpeak-FR-v1.3
+**Document ID:** VoxSpeak-ARCH-v1.4
+**Derived from:** VoxSpeak-FR-v1.4
 **Project:** VoxCore
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Revision note:** VoxSpeak-ARCH-v1.3 is VoxSpeak-ARCH-v1.2 with an additional non-breaking client-role clarification (Appendix C). All prior architectural decisions remain unchanged.
+**Revision note:** VoxSpeak-ARCH-v1.4 updates architectural contracts for control-plane operations, version policy signaling, role/platform enforcement, and queue/admission semantics.
 
 ---
 
 ## 1. Purpose and Architectural Goals
 
-1.1. This document defines the high-level architecture for VoxSpeak, the VoxCore TTS subsystem, to satisfy VoxSpeak-FR-v1.1.
+1.1. This document defines the high-level architecture for VoxSpeak, the VoxCore TTS subsystem, to satisfy VoxSpeak-FR-v1.4.
 
 1.2. Primary architectural goals:
 
@@ -57,45 +57,45 @@
 
 ## 4. Core Components and Responsibilities
 
-### 4.1. Public API (`voxspeak.api`)
+### 4.1. Public API Layer
 
 * Expose `synthesize()` (batch) and `stream()` (streaming) entrypoints.
 * Provide typed request/response objects.
 * Normalize error types and guarantee stable semantics.
 
-### 4.2. Personality Registry (`voxspeak.personality`)
+### 4.2. Personality Registry
 
 * Load and validate personality definitions from structured config.
 * Resolve a personality into a `ResolvedVoiceProfile` for a chosen engine.
 * Provide introspection.
 * Support hot-reload (optional, feature-flagged).
 
-### 4.3. Engine Abstraction (`voxspeak.engines`)
+### 4.3. Engine Abstraction
 
 * Common adapter interface implemented by each engine.
 * Capability discovery and parameter constraints.
 * Batch synthesis and streaming where possible.
 
-### 4.4. Text Pipeline (`voxspeak.text`)
+### 4.4. Text Pipeline
 
 * Apply per-personality preprocessing rules.
 * Validate markup for selected engine.
 * Produce engine-ready input text and an audit trail.
 
-### 4.5. Audio Pipeline (`voxspeak.audio`)
+### 4.5. Audio Pipeline
 
 * Normalize audio into a standard internal representation.
 * Apply post-processing via internal DSP and/or external tools through a constrained runner.
 * Run optional QC checks.
 
-### 4.6. Orchestration (`voxspeak.runtime`)
+### 4.6. Orchestration
 
 * Manage job lifecycle.
 * Enforce concurrency limits.
 * Provide prioritization.
 * Implement cancellation propagation.
 
-### 4.7. Persistence and Cache (`voxspeak.storage`)
+### 4.7. Persistence and Cache
 
 * Optional file output (off by default).
 * Metadata sidecar generation.
@@ -179,18 +179,23 @@ Note: If an engine lacks native streaming, implementation may optionally pseudo-
 
 ---
 
-## 11. Module Layout (Proposed)
+## 11. Cross-Cutting Architectural Contracts
 
-* `vox-speak/`
+11.1. The architecture shall provide a control-plane capability set including synthesis validation, personality linting, and personality reload operations.
 
-  * `voxspeak/api/`
-  * `voxspeak/personality/`
-  * `voxspeak/engines/`
-  * `voxspeak/text/`
-  * `voxspeak/audio/`
-  * `voxspeak/runtime/`
-  * `voxspeak/storage/`
-  * `voxspeak/tooling/` (optional)
+11.2. Control-plane operations shall return structured diagnostics with stable severity and machine-readable identifiers.
+
+11.3. The architecture shall support explicit requester and consumer role signaling and shall enforce role-gated operations according to configured policy.
+
+11.4. The architecture shall support optional consumer platform hints and shall define validation/enforcement behavior as a deploy-time policy choice.
+
+11.5. The architecture shall include admission control with explicit request-priority semantics, deterministic default priority behavior, and structured overload outcomes.
+
+11.6. The architecture shall emit stable lifecycle stage/event notifications for synthesize, stream, and batch workflows.
+
+11.7. The architecture shall expose API version-policy metadata, including requested and effective version outcomes, across all network-visible interfaces.
+
+11.8. When request-level version input is omitted, the architecture shall apply a documented server-defaulting rule without weakening compatibility enforcement.
 
 ---
 
@@ -244,7 +249,7 @@ C.3. The architecture shall support a split-role interaction pattern where VoxTh
 
 C.4. This implies a transport/session mechanism or equivalent routing capability between requester and consumer roles.
 
-C.5. This appendix is a non-breaking clarification.
+C.5. This appendix is a non-breaking clarification and is authoritative for client-role constraints in the v1.x architectural baseline.
 
 ---
 

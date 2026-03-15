@@ -1,14 +1,14 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## Transport and Wire Protocol Specification, Version 1.2 (Approved)
+## Transport and Wire Protocol Specification, Version 1.3 (Approved)
 
-**Document ID:** VoxSpeak-TRANSPORT-v1.2
-**Derived from:** VoxSpeak-FR-v1.3, VoxSpeak-ARCH-v1.3, VoxSpeak-API-v1.3
+**Document ID:** VoxSpeak-TRANSPORT-v1.3
+**Derived from:** VoxSpeak-FR-v1.4, VoxSpeak-ARCH-v1.4, VoxSpeak-API-v1.4
 **Project:** VoxCore
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Approval note:** This document is approved as-is. It defines gRPC/HTTP2 transport with required session-based synthesis to support split requester (VoxThink/Windows) and sole consumer (Windows).
+**Revision note:** VoxSpeak-TRANSPORT-v1.3 clarifies control-plane RPCs, version defaulting/advertisement, role/platform enforcement semantics, and queue/admission behavior.
 
 ---
 
@@ -25,7 +25,7 @@
 * Version and capability negotiation
 * Security and operational requirements
 
-1.3. This document maps VoxSpeak-API-v1.3 concepts onto network transports.
+1.3. This document maps VoxSpeak-API-v1.4 concepts onto network transports.
 
 ---
 
@@ -48,7 +48,7 @@
 
 ## 3. Transport Protocol Selection
 
-3.1. VoxSpeak-TRANSPORT-v1.2 standardizes on **gRPC over HTTP/2**.
+3.1. VoxSpeak-TRANSPORT-v1.3 standardizes on **gRPC over HTTP/2**.
 
 ---
 
@@ -60,6 +60,10 @@
 * **Consumer**: receives audio and metadata (Windows only).
 
 4.2. Because VoxThink is never a consumer, the transport shall support a split-role workflow where requester and consumer are different clients.
+
+4.3. Role signaling shall be explicit in requests for role-gated operations.
+
+4.4. Consumer platform hints may be provided by requesters and shall be validated or enforced according to configured server policy.
 
 ---
 
@@ -77,7 +81,7 @@
 * payload bytes
 * end-of-stream flag
 
-5.3. Audio compression codecs are out of scope for v1.2.
+5.3. Audio compression codecs are out of scope for v1.3.
 
 ---
 
@@ -89,9 +93,9 @@
 
 ### 6.2. Session-Based Synthesis (Required)
 
-6.2.1. `CreateSynthesisSession(request) -> CreateSessionResponse`
+6.2.1. `CreateSynthesisSession(request) -> CreateSynthesisSessionResponse`
 
-6.2.2. `CreateSessionResponse` returns:
+6.2.2. `CreateSynthesisSessionResponse` returns:
 
 * `session_id` (opaque)
 * `expires_at`
@@ -116,6 +120,15 @@
 * `StreamSynthesis(request) -> stream StreamMessage`
 
 6.3.2. If provided, it shall be semantically equivalent to creating a session and immediately subscribing.
+
+
+### 6.4. Control-Plane Operations (Required)
+
+6.4.1. `ValidateSynthesis(request) -> ValidateSynthesisResponse` shall return preflight diagnostics and resolved configuration preview without emitting audio.
+
+6.4.2. `LintPersonalities(request) -> LintPersonalitiesResponse` shall return structured diagnostics for loaded personality definitions.
+
+6.4.3. `ReloadPersonalities(request) -> ReloadPersonalitiesResponse` shall return reload outcome status and diagnostics.
 
 ---
 
@@ -142,17 +155,22 @@
 
 8.3. Sessions shall have a TTL; expiration terminates synthesis/subscription and releases resources.
 
+8.4. Request admission shall apply explicit priority semantics; when priority is omitted, the documented default priority shall be applied.
+
 ---
 
 ## 9. Versioning and Capability Negotiation
 
-9.1. Requests include `api_version` (e.g., `1.3`).
+9.1. Requests may include `api_version` (e.g., `1.4`).
+
+9.1.1. If `api_version` is omitted, the server shall apply its default API version and report the effective version in response metadata.
 
 9.2. Server publishes:
 
-* supported versions
+* supported versions and policy mode
+* default and effective API version metadata
 * supported audio formats
-* limits (max text length, max duration, concurrency)
+* exposed operational limits defined by wire contracts (for example max text length, concurrency)
 
 ---
 
@@ -161,6 +179,8 @@
 10.1. VoxSpeak errors map to gRPC status codes and include structured details.
 
 10.2. Cancellation maps to `CANCELLED`.
+
+10.3. Overload and admission-control rejections shall map to structured resource/capacity errors and shall include retry guidance when available.
 
 ---
 
@@ -180,7 +200,7 @@
 
 12.2. Structured logging includes request_id and session_id.
 
-12.3. Metrics: request/error counts, latency, active sessions, stream durations.
+12.3. Metrics shall include request/error counts, latency, active sessions, stream durations, and admission outcomes by priority class.
 
 ---
 

@@ -1,14 +1,14 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## Functional Requirements, Version 1.3 (Approved)
+## Functional Requirements, Version 1.4 (Approved)
 
-**Document ID:** VoxSpeak-FR-v1.3
+**Document ID:** VoxSpeak-FR-v1.4
 **Project:** VoxCore
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 **Change policy:** Breaking requirement changes require VoxSpeak-FR-v2; non-breaking clarifications may be issued as VoxSpeak-FR-v1.x.
 
-**Revision note:** VoxSpeak-FR-v1.3 is VoxSpeak-FR-v1.2 with an additional non-breaking client-role clarification (Appendix C). All prior requirements remain unchanged.
+**Revision note:** VoxSpeak-FR-v1.4 clarifies control-plane contracts, reproducibility controls, queue/admission behavior, and role/platform enforcement semantics.
 
 ---
 
@@ -250,6 +250,10 @@
 
 16.4. The system shall support basic prioritization of synthesis jobs.
 
+16.5. The system shall define a request-priority contract that includes accepted values, default behavior when omitted, and observable overload/admission outcomes.
+
+16.6. Under overload, the system shall return structured rejection or deferral errors rather than silently dropping requests.
+
 ---
 
 ## 17. Extensibility and Experimental Support
@@ -273,6 +277,30 @@
 18.4. The system shall enforce configurable limits on input size and expected output duration.
 
 18.5. The system shall isolate external tool invocation and prevent arbitrary command execution via configuration.
+
+---
+
+## 19. Control Plane, Version Policy, and Diagnostic Contracts
+
+19.1. The system shall provide a preflight synthesis validation operation that returns structured diagnostics and a resolved-configuration preview without producing audio.
+
+19.2. The system shall provide personality lint and personality reload operations; both operations shall return structured diagnostics, including outcome status and severity.
+
+19.3. The system shall support optional request-level reproducibility controls, including a deterministic seed and structured reproducibility flags.
+
+19.4. When requested reproducibility controls are unsupported by a selected engine or mode, the system shall continue using best-effort synthesis and shall record requested versus effective controls in metadata.
+
+19.5. Synthesis metadata shall support optional text preprocessing trace entries with, at minimum, rule identifier, input fragment, output fragment, and warning level.
+
+19.6. For split requester/consumer workflows, the system shall require explicit role signaling and shall enforce role-gated operations according to configured policy.
+
+19.7. The system shall accept optional consumer platform hints and shall define configured behavior for validation or enforcement of those hints.
+
+19.8. The system shall provide stable lifecycle stage/event semantics for synthesize, stream, and batch operations through callback and/or event-hook interfaces.
+
+19.9. The system shall advertise API version policy metadata, including default version, supported versions, policy mode, requested version, and effective version.
+
+19.10. When a client omits request-level API version input, the system shall apply a documented server-default versioning rule and shall expose the resulting effective version.
 
 ---
 
@@ -319,7 +347,7 @@ C.2. VoxSpeak-generated audio shall be consumed only by Windows clients.
 
 C.3. VoxSpeak shall support requests originating from VoxThink (Ubuntu) while streaming the resulting audio to Windows clients.
 
-C.4. This appendix is a non-breaking clarification. It further constrains expected client roles but does not remove support for other distributed arrangements unless explicitly stated in later major versions.
+C.4. This appendix is a non-breaking clarification and is authoritative for client-role constraints in the v1.x functional baseline.
 
 ---
 

@@ -1,14 +1,14 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## API Specification, Version 1.3 (Approved)
+## API Specification, Version 1.4 (Approved)
 
-**Document ID:** VoxSpeak-API-v1.3
-**Derived from:** VoxSpeak-FR-v1.3, VoxSpeak-ARCH-v1.3
+**Document ID:** VoxSpeak-API-v1.4
+**Derived from:** VoxSpeak-FR-v1.4, VoxSpeak-ARCH-v1.4
 **Project:** VoxCore
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Revision note:** VoxSpeak-API-v1.3 is VoxSpeak-API-v1.2 with an additional non-breaking client-role clarification (Appendix C). All prior API contracts remain unchanged.
+**Revision note:** VoxSpeak-API-v1.4 adds normative contracts for control-plane operations, reproducibility controls, batch/comparative workflows, and API version-policy metadata.
 
 ---
 
@@ -20,12 +20,14 @@
 
 1.3. This specification defines:
 
-* Batch synthesis interface
+* Single-shot synthesis interface
+* Batch and comparative synthesis interfaces
 * Streaming synthesis interface
 * Personality and capability introspection
+* Control-plane validation and governance interfaces
 * Caching and persistence controls
 * Observability and metadata outputs
-* Error taxonomy
+* Error taxonomy and overload semantics
 
 ---
 
@@ -48,7 +50,12 @@
 * `voxspeak`:
 
   * `synthesize(...)`
+  * `synthesize_batch(...)`
+  * `synthesize_comparative(...)`
   * `stream(...)`
+  * `validate_synthesis(...)`
+  * `lint_personalities(...)`
+  * `reload_personalities(...)`
   * `list_personalities()`
   * `describe_personality(personality_id, ...)`
   * `list_engines()`
@@ -116,9 +123,24 @@ Configuration precedence is deterministic. When multiple sources provide the sam
 * `enable_postprocessing: bool = True`
 * `enable_qc: bool = False`
 * `cache_policy: CachePolicy | None`
+* `reproducibility: ReproducibilityOptions | None`
+* `priority: str | None`
+* `requester_role: str | None`
+* `consumer_role: str | None`
+* `consumer_platform: str | None`
 * `file_output: FileOutputOptions | None` (required when output_mode=FILE)
 * `stream_options: StreamOptions | None` (required when output_mode=STREAM)
 * `request_id: str | None`
+
+
+### 4.3A. Reproducibility Controls
+
+`ReproducibilityOptions`:
+
+* `seed: int | None`
+* `flags: dict[str, bool] | None`
+
+When provided on a request, reproducibility options shall be interpreted as best-effort controls and shall not require engine support for every option.
 
 ### 4.4. Streaming Options
 
@@ -197,6 +219,8 @@ Configuration precedence is deterministic. When multiple sources provide the sam
 * cache info (enabled/hit/key/backend/bypass/force_regenerate/effective/warning/invalidation outcomes)
 * timings
 * warnings (e.g., pseudo-streaming)
+* reproducibility request/effective outcome
+* optional text-preprocessing trace entries (rule_id, input_fragment, output_fragment, warning_level)
 
 ---
 
@@ -208,24 +232,40 @@ Configuration precedence is deterministic. When multiple sources provide the sam
 * If `OutputMode.FILE`, writes audio and returns file artifact.
 * Always returns metadata.
 
-### 5.2. `stream()`
+### 5.2. `synthesize_batch()`
+
+* Accepts an ordered set of synthesis requests.
+* Shall preserve request order in returned result ordering.
+* Shall define failure policy as all-or-partial completion and return structured per-item outcomes.
+* May expose caller controls for parallelism bounds.
+
+### 5.3. `synthesize_comparative()`
+
+* Accepts a base text input with a personality/engine comparison matrix.
+* Shall return a structured comparative result set that preserves matrix identity for each output.
+* Shall include per-item metadata sufficient for reproducibility audits.
+
+### 5.4. `stream()`
 
 * Defaults to `StreamMode.REALTIME` unless overridden.
 * Prefers native streaming.
 * If pseudo-streaming fallback is used, marks warnings accordingly.
 
-### 5.3. Personality Introspection
+### 5.5. Control-Plane Operations
+
+* `validate_synthesis(request) -> ValidationResult` shall provide preflight diagnostics and resolved-config preview without generating audio.
+* `lint_personalities() -> LintResult` shall return structured diagnostics for loaded personality definitions.
+* `reload_personalities() -> ReloadResult` shall return reload outcome and diagnostics.
+
+### 5.6. Personality Introspection
 
 * `list_personalities() -> list[PersonalitySummary]`
 * `describe_personality(personality_id: str, engine_id: str | None = None) -> PersonalityDescription`
 
-### 5.4. Engine Introspection
+### 5.7. Engine Introspection
 
 * `list_engines() -> list[EngineSummary]`
 * `engine_capabilities(engine_id: str) -> EngineCapabilities`
-
----
-
 ## 6. Error Taxonomy
 
 6.1. All public exceptions inherit from `VoxSpeakError`.
@@ -253,9 +293,11 @@ Configuration precedence is deterministic. When multiple sources provide the sam
 
 ## 7. Observability Contracts
 
-7.1. Support logger and/or callback hooks for stage lifecycle and structured events.
+7.1. The API shall support logger and/or callback hooks for stage lifecycle and structured events with stable stage and event-type identifiers.
 
-7.2. Each request includes a correlation id (`request_id`) that propagates to logs/metadata.
+7.2. Each request shall include a correlation id (`request_id`) that propagates to logs/metadata.
+
+7.3. API responses shall expose version-policy metadata that includes requested API version (if supplied), effective API version, default server version, supported versions, and policy mode.
 
 ---
 
@@ -274,13 +316,23 @@ Configuration precedence is deterministic. When multiple sources provide the sam
 
 ---
 
-## 9. Open API Decisions
+## 9. API Versioning and Compatibility Policy
 
-9.1. Whether to provide an explicit `VoxSpeakClient` object for dependency injection.
+9.1. Request-level `api_version` input may be omitted by clients.
 
-9.2. Whether async is first-class (async-only streaming) or dual-mode.
+9.2. When omitted, the server-default version shall be applied and exposed as the effective version in response metadata.
 
-9.3. Whether pseudo-streaming fallback is enabled by default or opt-in.
+9.3. When supplied and unsupported, the API shall return a structured compatibility error that includes supported versions.
+
+---
+
+## 10. Open API Decisions
+
+10.1. Whether to provide an explicit `VoxSpeakClient` object for dependency injection.
+
+10.2. Whether async is first-class (async-only streaming) or dual-mode.
+
+10.3. Whether pseudo-streaming fallback is enabled by default or opt-in.
 
 ---
 
@@ -327,7 +379,7 @@ C.3. The API shall support a split-role workflow where a requester (e.g., VoxThi
 
 C.4. Where requester and consumer are separate clients, the API/transport shall provide a session or subscription mechanism enabling the Windows client to attach to the correct stream.
 
-C.5. This appendix is a non-breaking clarification.
+C.5. This appendix is a non-breaking clarification and is authoritative for client-role constraints in the v1.x API baseline.
 
 ---
 

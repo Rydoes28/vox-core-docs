@@ -1,9 +1,9 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## Protobuf Definitions, Version 1 (Approved)
+## Protobuf Definitions, Version 1.1 (Approved)
 
-**Document ID:** VoxSpeak-PROTO-v1  
-**Derived from:** VoxSpeak-TRANSPORT-v1.2 (Approved), VoxSpeak-API-v1.3 (Approved)  
+**Document ID:** VoxSpeak-PROTO-v1.1  
+**Derived from:** VoxSpeak-TRANSPORT-v1.3 (Approved), VoxSpeak-API-v1.4 (Approved)  
 **Project:** VoxCore  
 **Subsystem:** VoxSpeak (`vox-speak`)  
 **Status:** Approved
@@ -14,13 +14,14 @@
 
 ## 1. Scope
 
-1.1. This document defines the initial `.proto` schema for the VoxSpeak gRPC transport.
+1.1. This document defines the `.proto` schema baseline for the VoxSpeak gRPC transport.
 
 1.2. It expresses:
 - Session-based synthesis (required)
 - Streaming subscription (Windows consumer)
+- Control-plane validation and personality-governance RPCs
 - Introspection RPCs
-- Core message types for requests, audio chunks, metadata, and errors
+- Core message types for requests, reproducibility controls, audio chunks, metadata, and errors
 
 ---
 
@@ -37,8 +38,15 @@ import "google/protobuf/struct.proto";
 option go_package = "voxspeak/v1;voxspeakv1";
 
 // VoxSpeakService exposes the VoxSpeak subsystem over gRPC.
-// Transport baseline: VoxSpeak-TRANSPORT-v1.2 (Approved).
+// Transport baseline: VoxSpeak-TRANSPORT-v1.3 (Approved).
 service VoxSpeakService {
+  // ----------------------
+  // Control-plane
+  // ----------------------
+  rpc ValidateSynthesis(ValidateSynthesisRequest) returns (ValidateSynthesisResponse);
+  rpc LintPersonalities(LintPersonalitiesRequest) returns (LintPersonalitiesResponse);
+  rpc ReloadPersonalities(ReloadPersonalitiesRequest) returns (ReloadPersonalitiesResponse);
+
   // ----------------------
   // Introspection
   // ----------------------
@@ -74,8 +82,11 @@ message RequestHeader {
   // Caller-supplied correlation id; if empty, server may generate.
   string request_id = 1;
 
-  // Client API/protocol version (e.g., "1.3").
+  // Client API/protocol version (e.g., "1.4"). Optional.
   string api_version = 2;
+
+  // Optional requester role hint (e.g., "voxthink", "windows").
+  string requester_role = 3;
 }
 
 message ResponseHeader {
@@ -87,6 +98,12 @@ message ResponseHeader {
 
   // Server implementation identifier (optional).
   string server_id = 3;
+
+  // Version-policy metadata for negotiation transparency.
+  string default_api_version = 4;
+  repeated string supported_api_versions = 5;
+  string version_policy_mode = 6;
+  string effective_api_version = 7;
 }
 
 // ----------------------
@@ -187,6 +204,11 @@ message FileOutputOptions {
   string container = 4;    // e.g., "wav", "flac"
 }
 
+message ReproducibilityOptions {
+  int64 seed = 1;
+  google.protobuf.Struct flags = 2;
+}
+
 message SynthesisRequest {
   // Raw text to synthesize.
   string text = 1;
@@ -206,6 +228,12 @@ message SynthesisRequest {
   bool enable_qc = 7;
 
   CachePolicy cache_policy = 8;
+
+  // Optional reproducibility controls; server applies best-effort semantics.
+  ReproducibilityOptions reproducibility = 11;
+
+  // Optional queue-priority class; server applies default when omitted.
+  string priority = 12;
 
   // Required iff output_mode == OUTPUT_MODE_FILE.
   FileOutputOptions file_output = 9;
@@ -238,6 +266,13 @@ message CacheInfo {
   int32 invalidated_count = 10;
 }
 
+message TextProcessingTraceEntry {
+  string rule_id = 1;
+  string input_fragment = 2;
+  string output_fragment = 3;
+  string warning_level = 4;
+}
+
 message SynthesisMetadata {
   google.protobuf.Timestamp timestamp_utc = 1;
 
@@ -260,6 +295,63 @@ message SynthesisMetadata {
 
   // e.g., pseudo-streaming fallback.
   repeated string warnings = 12;
+
+  // Optional preprocessing trace for diagnostics/reproducibility audits.
+  repeated TextProcessingTraceEntry text_processing_trace = 13;
+
+  // Requested and effective reproducibility settings.
+  ReproducibilityOptions requested_reproducibility = 14;
+  ReproducibilityOptions effective_reproducibility = 15;
+  bool reproducibility_fully_supported = 16;
+}
+
+// ----------------------
+// Control-plane RPCs
+// ----------------------
+
+enum DiagnosticSeverity {
+  DIAGNOSTIC_SEVERITY_UNSPECIFIED = 0;
+  DIAGNOSTIC_SEVERITY_INFO = 1;
+  DIAGNOSTIC_SEVERITY_WARNING = 2;
+  DIAGNOSTIC_SEVERITY_ERROR = 3;
+}
+
+message ValidationDiagnostic {
+  DiagnosticSeverity severity = 1;
+  string code = 2;
+  string message = 3;
+  google.protobuf.Struct details = 4;
+}
+
+message ValidateSynthesisRequest {
+  RequestHeader header = 1;
+  SynthesisRequest request = 2;
+}
+
+message ValidateSynthesisResponse {
+  ResponseHeader header = 1;
+  bool ok = 2;
+  repeated ValidationDiagnostic diagnostics = 3;
+  google.protobuf.Struct resolved_config = 4;
+}
+
+message LintPersonalitiesRequest {
+  RequestHeader header = 1;
+}
+
+message LintPersonalitiesResponse {
+  ResponseHeader header = 1;
+  repeated ValidationDiagnostic diagnostics = 2;
+}
+
+message ReloadPersonalitiesRequest {
+  RequestHeader header = 1;
+}
+
+message ReloadPersonalitiesResponse {
+  ResponseHeader header = 1;
+  bool reloaded = 2;
+  repeated ValidationDiagnostic diagnostics = 3;
 }
 
 // ----------------------
@@ -273,8 +365,11 @@ message CreateSynthesisSessionRequest {
   // Server may override or validate.
   SynthesisRequest request = 2;
 
-  // Optional: declare intended consumer platform (diagnostics/routing only).
+  // Optional: declare intended consumer platform.
   string consumer_platform = 3; // e.g., "windows"
+
+  // Optional: declare intended consumer role; server may enforce policy.
+  string consumer_role = 4;
 }
 
 message CreateSynthesisSessionResponse {
@@ -435,5 +530,5 @@ message EngineCapabilities {
 
 ---
 
-End of Draft
+End of Document
 
