@@ -80,10 +80,12 @@ The `voxspeak.config` surface is implemented via these entrypoints:
 
 Configuration precedence is deterministic. When multiple sources provide the same field, the highest-precedence value wins.
 
-1. Function arguments passed directly to `resolve_client_config(...)` (for example `endpoint=...`, `auth_headers=...`, `timeouts=...`, `retries=...`).
+1. Function arguments passed directly to `resolve_client_config(...)` (for example `endpoint=...`, `auth_headers=...`, `timeouts=...`, `retries=...`, `verbose_debug_logging=...`).
 2. Explicit `ClientConfig` object passed as `config=...`.
 3. Environment variables (`VOXSPEAK_*`) loaded via `load_client_config_from_env(...)`.
-4. Built-in defaults (for example endpoint `127.0.0.1:50051`).
+4. Built-in defaults (for example endpoint `127.0.0.1:50051` and `verbose_debug_logging=False`).
+
+`ClientConfig.verbose_debug_logging` uses tri-state merge semantics during resolution (`None` = unset, `False`, `True`), so omitted values can be cleanly distinguished from explicit opt-out/opt-in until `resolve_client_config(...)` computes the effective boolean used by transport execution.
 
 `transport.get_default_client()` applies the same precedence order by resolving module-level explicit config (`set_default_client_config(...)`) against process environment and built-in defaults before constructing the transport client.
 
@@ -131,6 +133,7 @@ Configuration precedence is deterministic. When multiple sources provide the sam
 * `file_output: FileOutputOptions | None` (required when output_mode=FILE)
 * `stream_options: StreamOptions | None` (required when output_mode=STREAM)
 * `request_id: str | None`
+* `verbose_debug_logging: bool | None` (optional per-request override for verbose/debug trace emission)
 
 
 ### 4.3A. Reproducibility Controls

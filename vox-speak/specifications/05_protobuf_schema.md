@@ -240,6 +240,9 @@ message SynthesisRequest {
 
   // Required iff output_mode == OUTPUT_MODE_STREAM.
   StreamOptions stream_options = 10;
+
+  // Optional request-level override for verbose/debug trace logging; when unset, server/client defaults apply.
+  optional bool verbose_debug_logging = 13;
 }
 
 message TimingsMs {
@@ -531,4 +534,3 @@ message EngineCapabilities {
 ---
 
 End of Document
-
