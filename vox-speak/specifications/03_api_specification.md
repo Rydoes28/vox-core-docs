@@ -60,6 +60,7 @@
   * `describe_personality(personality_id, ...)`
   * `list_engines()`
   * `engine_capabilities(engine_id)`
+  * `get_global_synthesis_limits()`
 
 * `voxspeak.types` (DTOs, enums)
 
@@ -259,6 +260,8 @@ When provided on a request, reproducibility options shall be interpreted as best
 * `validate_synthesis(request) -> ValidationResult` shall provide preflight diagnostics and resolved-config preview without generating audio.
 * `lint_personalities() -> LintResult` shall return structured diagnostics for loaded personality definitions.
 * `reload_personalities() -> ReloadResult` shall return reload outcome and diagnostics.
+* `get_global_synthesis_limits() -> GlobalSynthesisLimits` shall return published server-global operational limits for client preflight.
+* When the connected server does not implement the global-limits control-plane operation, clients may return a typed unavailable result (`available=False`) instead of raising a hard transport failure.
 
 ### 5.6. Personality Introspection
 
@@ -269,6 +272,7 @@ When provided on a request, reproducibility options shall be interpreted as best
 
 * `list_engines() -> list[EngineSummary]`
 * `engine_capabilities(engine_id: str) -> EngineCapabilities`
+
 ## 6. Error Taxonomy
 
 6.1. All public exceptions inherit from `VoxSpeakError`.

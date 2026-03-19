@@ -55,6 +55,8 @@ service VoxSpeakService {
 
   rpc ListEngines(ListEnginesRequest) returns (ListEnginesResponse);
   rpc EngineCapabilities(EngineCapabilitiesRequest) returns (EngineCapabilitiesResponse);
+  // Publish server-global planning/admission limits for client preflight.
+  rpc GetGlobalSynthesisLimits(GetGlobalSynthesisLimitsRequest) returns (GetGlobalSynthesisLimitsResponse);
 
   // ----------------------
   // Session-based synthesis (required)
@@ -500,6 +502,26 @@ message EngineCapabilitiesRequest {
 message EngineCapabilitiesResponse {
   ResponseHeader header = 1;
   EngineCapabilities capabilities = 2;
+}
+
+// Request server-global planning/admission limits for client preflight.
+message GetGlobalSynthesisLimitsRequest {
+  RequestHeader header = 1;
+}
+
+// Published server-global limits. These values are not engine-local capability fields.
+message GlobalSynthesisLimits {
+  int32 max_synthesis_duration_ms = 1;
+  int32 global_max_concurrent_jobs = 2;
+  int32 global_max_queued_jobs = 3;
+  map<string, int32> per_engine_max_concurrent_jobs = 4;
+  map<string, int32> per_engine_max_queued_jobs = 5;
+}
+
+// Response envelope for published server-global planning/admission limits.
+message GetGlobalSynthesisLimitsResponse {
+  ResponseHeader header = 1;
+  GlobalSynthesisLimits limits = 2;
 }
 
 message EngineCapabilities {
