@@ -1,14 +1,14 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## API Specification, Version 1.4 (Approved)
+## API Specification, Version 1.5 (Approved)
 
-**Document ID:** VoxSpeak-API-v1.4
-**Derived from:** VoxSpeak-FR-v1.4, VoxSpeak-ARCH-v1.4
+**Document ID:** VoxSpeak-API-v1.5
+**Derived from:** VoxSpeak-FR-v1.5, VoxSpeak-ARCH-v1.5
 **Project:** VoxCore
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Revision note:** VoxSpeak-API-v1.4 adds normative contracts for control-plane operations, reproducibility controls, batch/comparative workflows, and API version-policy metadata.
+**Revision note:** VoxSpeak-API-v1.5 aligns the public Python API with the shipped request types, regression workflows, control-plane results, and transport-compatibility behavior.
 
 ---
 
@@ -16,377 +16,317 @@
 
 1.1. This document specifies the public Python API contracts for VoxSpeak.
 
-1.2. The API is library-first and designed to be consumed by automation, agent runtimes, and optional front-ends (CLI/web/GUI).
+1.2. The API shall remain library-first and suitable for automation, agent runtimes, and optional front-ends.
 
 1.3. This specification defines:
 
-* Single-shot synthesis interface
-* Batch and comparative synthesis interfaces
-* Streaming synthesis interface
-* Personality and capability introspection
-* Control-plane validation and governance interfaces
-* Caching and persistence controls
-* Observability and metadata outputs
-* Error taxonomy and overload semantics
+* single-shot synthesis
+* streaming synthesis
+* batch synthesis
+* comparative synthesis
+* regression-corpus workflows
+* validation and personality governance
+* personality and engine introspection
+* global-limits introspection
+* observability hooks and error contracts
 
 ---
 
 ## 2. Design Principles
 
-2.1. Stable surface.
+2.1. The API shall provide a stable public surface.
 
-2.2. Typed contracts.
+2.2. The API shall use typed contracts.
 
-2.3. Metadata-first.
+2.3. The API shall be metadata-first.
 
-2.4. Explicit modes (default non-persistent).
+2.4. The API shall default to non-persistent outputs.
 
-2.5. Engine-agnostic.
-
----
-
-## 3. Public Package Surface (Proposed)
-
-* `voxspeak`:
-
-  * `synthesize(...)`
-  * `synthesize_batch(...)`
-  * `synthesize_comparative(...)`
-  * `stream(...)`
-  * `validate_synthesis(...)`
-  * `lint_personalities(...)`
-  * `reload_personalities(...)`
-  * `list_personalities()`
-  * `describe_personality(personality_id, ...)`
-  * `list_engines()`
-  * `engine_capabilities(engine_id)`
-  * `get_global_synthesis_limits()`
-
-* `voxspeak.types` (DTOs, enums)
-
-* `voxspeak.errors` (public exception types)
-
-* `voxspeak.config` (configuration entrypoints)
+2.5. The API shall remain engine-agnostic.
 
 ---
 
-## 3.1. Configuration Entrypoints and Precedence
+## 3. Public Package Surface
 
-The `voxspeak.config` surface is implemented via these entrypoints:
+3.1. The `voxspeak` package shall expose public entry points including:
+
+* `synthesize(...)`
+* `stream(...)`
+* `synthesize_batch(...)`
+* `synthesize_comparative(...)`
+* `load_regression_corpus(...)`
+* `synthesize_regression_corpus(...)`
+* `build_regression_metadata_artifact(...)`
+* `write_regression_metadata_artifact(...)`
+* `diff_regression_metadata_artifacts(...)`
+* `validate_synthesis(...)`
+* `lint_personalities()`
+* `reload_personalities()`
+* `list_personalities()`
+* `describe_personality(...)`
+* `list_engines()`
+* `engine_capabilities(...)`
+* `get_global_synthesis_limits()`
+* stage-event callback registration functions
+
+3.2. The package shall expose public DTOs and enums through `voxspeak.types`.
+
+3.3. The package shall expose public exception types through `voxspeak.errors`.
+
+3.4. The package shall expose client configuration entry points through `voxspeak.config`.
+
+---
+
+## 4. Configuration Entrypoints and Precedence
+
+4.1. The configuration surface shall provide these entry points:
 
 * `load_client_config_from_env(...)`
 * `set_default_client_config(...)`
 * `get_default_client_config()`
 * `resolve_client_config(...)`
 
-Configuration precedence is deterministic. When multiple sources provide the same field, the highest-precedence value wins.
+4.2. Configuration resolution shall apply the following precedence order from highest to lowest:
 
-1. Function arguments passed directly to `resolve_client_config(...)` (for example `endpoint=...`, `auth_headers=...`, `timeouts=...`, `retries=...`, `verbose_debug_logging=...`).
-2. Explicit `ClientConfig` object passed as `config=...`.
-3. Environment variables (`VOXSPEAK_*`) loaded via `load_client_config_from_env(...)`.
-4. Built-in defaults (for example endpoint `127.0.0.1:50051` and `verbose_debug_logging=False`).
+1. direct function arguments to `resolve_client_config(...)`
+2. an explicit `ClientConfig` object passed as `config=...`
+3. `VOXSPEAK_*` environment variables
+4. built-in defaults
 
-`ClientConfig.verbose_debug_logging` uses tri-state merge semantics during resolution (`None` = unset, `False`, `True`), so omitted values can be cleanly distinguished from explicit opt-out/opt-in until `resolve_client_config(...)` computes the effective boolean used by transport execution.
+4.3. `verbose_debug_logging` shall support tri-state resolution semantics until effective configuration is computed.
 
-`transport.get_default_client()` applies the same precedence order by resolving module-level explicit config (`set_default_client_config(...)`) against process environment and built-in defaults before constructing the transport client.
+4.4. The default transport client shall apply the same precedence rules.
 
-### Migration Notes for Existing Callers
+---
 
-* Existing callers that rely on environment-only configuration continue to work unchanged.
-* Existing callers that already call `set_default_client_config(...)` continue to override environment variables globally for default-client construction.
-* Callers that need per-call overrides should prefer `resolve_client_config(..., endpoint=..., ...)`, where function arguments intentionally take precedence over explicit/global config and env values.
-* If multiple sources are populated, callers should assume the above precedence order rather than implicit merge behavior.
+## 5. Core Data Types
 
-## 4. Core Data Types
+### 5.1. Identifiers and Enums
 
-### 4.1. Enums and Identifiers
+5.1.1. `EngineId` shall be a string identifier.
 
-* `EngineId`: string (e.g., `"piper"`, `"coqui"`)
-* `PersonalityId`: string (e.g., `"ship_ai"`)
-* `OutputMode`: `MEMORY` (default), `STREAM`, `FILE`
-* `StreamMode`: `REALTIME`, `FAST_AS_POSSIBLE`
+5.1.2. `PersonalityId` shall be a string identifier.
 
-### 4.2. Audio Format Descriptor
+5.1.3. `OutputMode` shall support `MEMORY`, `STREAM`, and `FILE`.
 
-`AudioFormat`:
+5.1.4. `StreamMode` shall support `REALTIME` and `FAST_AS_POSSIBLE`.
+
+### 5.2. `AudioFormat`
+
+5.2.1. `AudioFormat` shall include:
 
 * `sample_rate_hz: int`
 * `channels: int`
-* `sample_format: str` (e.g., `"s16"`, `"f32"`)
+* `sample_format: str | enum-compatible value`
 
-### 4.3. Synthesis Request
+### 5.3. `SynthesisRequest`
 
-`SynthesisRequest`:
+5.3.1. `SynthesisRequest` shall include:
 
 * `text: str`
 * `personality_id: PersonalityId`
-* `engine_id: EngineId | None` (optional override)
+* `engine_id: EngineId | None`
 * `output_mode: OutputMode = MEMORY`
 * `audio_format: AudioFormat | None`
 * `enable_postprocessing: bool = True`
 * `enable_qc: bool = False`
 * `cache_policy: CachePolicy | None`
-* `reproducibility: ReproducibilityOptions | None`
-* `priority: str | None`
-* `requester_role: str | None`
-* `consumer_role: str | None`
-* `consumer_platform: str | None`
-* `file_output: FileOutputOptions | None` (required when output_mode=FILE)
-* `stream_options: StreamOptions | None` (required when output_mode=STREAM)
+* `file_output: FileOutputOptions | None`
+* `stream_options: StreamOptions | None`
 * `request_id: str | None`
-* `verbose_debug_logging: bool | None` (optional per-request override for verbose/debug trace emission)
+* `verbose_debug_logging: bool | None`
 
+5.3.2. `SynthesisRequest` shall not require transport-only role, platform, token, or queue-priority fields.
 
-### 4.3A. Reproducibility Controls
+5.3.3. `file_output` shall be required when `output_mode=FILE`.
 
-`ReproducibilityOptions`:
+5.3.4. `stream_options` shall be required when `output_mode=STREAM`.
 
-* `seed: int | None`
-* `flags: dict[str, bool] | None`
+### 5.4. `StreamOptions`
 
-When provided on a request, reproducibility options shall be interpreted as best-effort controls and shall not require engine support for every option.
-
-### 4.4. Streaming Options
-
-`StreamOptions`:
+5.4.1. `StreamOptions` shall include:
 
 * `mode: StreamMode`
 * `chunk_duration_ms: int | None`
 * `prefetch_ms: int | None`
 
-### 4.5. File Output Options
+### 5.5. `FileOutputOptions`
 
-`FileOutputOptions`:
+5.5.1. `FileOutputOptions` shall include:
 
 * `output_dir: str`
 * `filename_template: str | None`
 * `write_metadata_sidecar: bool = True`
-* `container: str | None` (e.g., `"wav"`, `"flac"`)
+* `container: str | None`
 
-### 4.6. Cache Policy
+### 5.6. `CachePolicy`
 
-`CachePolicy`:
+5.6.1. `CachePolicy` shall include:
 
 * `enabled: bool`
-* `backend: str | None` (e.g., `"memory"`, `"file"`)
+* `backend: str | None`
 * `bypass: bool = False`
 * `invalidate_key: str | None`
 * `force_regenerate: bool = False`
 * `invalidate_prefix: str | None`
 
-### 4.7. Synthesis Result
+### 5.7. `SynthesisResult`
 
-`SynthesisResult`:
+5.7.1. `SynthesisResult` shall include:
 
 * `request_id: str`
 * `output_mode: OutputMode`
-* `audio: AudioBuffer | None` (MEMORY)
-* `stream: StreamHandle | None` (STREAM)
-* `file: FileArtifact | None` (FILE)
+* exactly one of `audio`, `stream`, or `file`
 * `metadata: SynthesisMetadata`
 
-### 4.8. Audio Buffer
+### 5.8. `StreamHandle` and `AudioChunk`
 
-`AudioBuffer`:
+5.8.1. `StreamHandle` shall support iteration, cancellation, status inspection, and final metadata retrieval.
 
-* `format: AudioFormat`
-* `pcm: bytes | memoryview`
-* `duration_ms: int | None`
+5.8.2. `AudioChunk` shall include explicit format metadata, chunk index, PCM bytes, and an end-of-stream indicator.
 
-### 4.9. Stream Handle and Chunks
+### 5.9. `SynthesisMetadata`
 
-`StreamHandle`:
-
-* iteration (`__iter__`) yielding `AudioChunk`
-* optional async iteration (`__aiter__`) yielding `AudioChunk`
-* `cancel() -> None`
-* `status() -> StreamStatus`
-* `final_metadata() -> SynthesisMetadata`
-
-`AudioChunk`:
-
-* `format: AudioFormat`
-* `index: int`
-* `pcm: bytes | memoryview`
-* `is_last: bool`
-
-### 4.10. Metadata
-
-`SynthesisMetadata` includes:
+5.9.1. `SynthesisMetadata` shall include, when available:
 
 * timestamps
 * original and processed text
-* personality_id, engine_id, model_id
-* resolved params
-* post-processing chain
-* QC results (if enabled)
-* cache info (enabled/hit/key/backend/bypass/force_regenerate/effective/warning/invalidation outcomes)
-* timings
-* warnings (e.g., pseudo-streaming)
-* reproducibility request/effective outcome
-* optional text-preprocessing trace entries (rule_id, input_fragment, output_fragment, warning_level)
+* personality, engine, and model identifiers
+* synthesis parameters
+* post-processing chain description
+* quality-control results
+* cache information
+* timing information
+* warning codes
+* optional text-processing trace entries
+
+5.9.2. The current public `SynthesisMetadata` contract shall not require requested-versus-effective reproducibility outcome fields.
+
+### 5.10. Control-Plane Result Types
+
+5.10.1. `ValidationResult` shall contain `ok`, validation diagnostics, and resolved configuration preview data.
+
+5.10.2. `PersonalityLintResult` shall contain `ok`, personality diagnostics, and discovery metadata.
+
+5.10.3. `PersonalityReloadResult` shall contain `ok`, `reloaded`, personality diagnostics, and discovery metadata.
+
+5.10.4. `GlobalSynthesisLimits` shall include `available` plus published server-global limits.
+
+5.10.5. When `GlobalSynthesisLimits.available` is `False`, callers shall treat all remaining fields as compatibility placeholders rather than as effective runtime limits.
 
 ---
 
-## 5. Public Functions
+## 6. Public Functions
 
-### 5.1. `synthesize()`
+### 6.1. `synthesize()`
 
-* Defaults to `OutputMode.MEMORY`.
-* If `OutputMode.FILE`, writes audio and returns file artifact.
-* Always returns metadata.
+6.1.1. `synthesize()` shall default to `OutputMode.MEMORY`.
 
-### 5.2. `synthesize_batch()`
+6.1.2. `synthesize()` shall always return metadata.
 
-* Accepts an ordered set of synthesis requests.
-* Shall preserve request order in returned result ordering.
-* Shall define failure policy as all-or-partial completion and return structured per-item outcomes.
-* May expose caller controls for parallelism bounds.
+6.1.3. When `OutputMode.FILE` is selected, `synthesize()` shall return a file artifact rather than an in-memory buffer.
 
-### 5.3. `synthesize_comparative()`
+### 6.2. `stream()`
 
-* Accepts a base text input with a personality/engine comparison matrix.
-* Shall return a structured comparative result set that preserves matrix identity for each output.
-* Shall include per-item metadata sufficient for reproducibility audits.
+6.2.1. `stream()` shall default to real-time streaming unless overridden.
 
-### 5.4. `stream()`
+6.2.2. `stream()` shall prefer native streaming when available.
 
-* Defaults to `StreamMode.REALTIME` unless overridden.
-* Prefers native streaming.
-* If pseudo-streaming fallback is used, marks warnings accordingly.
+6.2.3. When pseudo-stream fallback is used, the final metadata shall include machine-readable warning codes.
 
-### 5.5. Control-Plane Operations
+### 6.3. `synthesize_batch()`
 
-* `validate_synthesis(request) -> ValidationResult` shall provide preflight diagnostics and resolved-config preview without generating audio.
-* `lint_personalities() -> LintResult` shall return structured diagnostics for loaded personality definitions.
-* `reload_personalities() -> ReloadResult` shall return reload outcome and diagnostics.
-* `get_global_synthesis_limits() -> GlobalSynthesisLimits` shall return published server-global operational limits for client preflight.
-* When the connected server does not implement the global-limits control-plane operation, clients may return a typed unavailable result (`available=False`) instead of raising a hard transport failure.
+6.3.1. `synthesize_batch()` shall accept either a `BatchSynthesisRequest` or an iterable of batch items.
 
-### 5.6. Personality Introspection
+6.3.2. Returned item ordering shall preserve request ordering.
 
-* `list_personalities() -> list[PersonalitySummary]`
-* `describe_personality(personality_id: str, engine_id: str | None = None) -> PersonalityDescription`
+6.3.3. The batch contract shall support deterministic fail-fast and continue-on-error policies.
 
-### 5.7. Engine Introspection
+6.3.4. In fail-fast mode, unscheduled items shall be reported as skipped rather than silently omitted.
 
-* `list_engines() -> list[EngineSummary]`
-* `engine_capabilities(engine_id: str) -> EngineCapabilities`
+### 6.4. `synthesize_comparative()`
 
-## 6. Error Taxonomy
+6.4.1. `synthesize_comparative()` shall synthesize one text input across a caller-specified personality and engine matrix.
 
-6.1. All public exceptions inherit from `VoxSpeakError`.
+6.4.2. Comparative item identifiers shall remain stable and matrix-derived.
 
-6.2. Proposed exception types:
+### 6.5. Regression Workflows
 
-* `ConfigurationError`
-* `PersonalityNotFoundError`
-* `EngineNotFoundError`
-* `ModelNotFoundError`
-* `MarkupNotSupportedError`
-* `ParameterOutOfRangeError`
-* `SynthesisError`
-* `StreamingNotSupportedError`
-* `PostProcessingError`
-* `QualityControlError` (optional)
-* `CacheError`
-* `FileOutputError`
-* `ExternalToolError`
-* `CancelledError`
+6.5.1. `load_regression_corpus(...)` shall load UTF-8 text corpora, ignore blank lines and comment lines beginning with `#`, and reject empty corpora.
 
-6.3. Errors are structured and include `code`, `message`, `details`, and optional `cause`.
+6.5.2. `synthesize_regression_corpus(...)` shall normalize corpus input, expand phrase/personality/engine combinations deterministically, and return a batch result.
+
+6.5.3. The regression-corpus contract shall preserve stable item identifiers and request identifiers derived from deterministic matrix labels.
+
+6.5.4. `build_regression_metadata_artifact(...)` shall build a deterministic comparison artifact from a batch result.
+
+6.5.5. `write_regression_metadata_artifact(...)` shall persist that artifact.
+
+6.5.6. `diff_regression_metadata_artifacts(...)` shall return concise machine-readable mismatch data.
+
+### 6.6. Control-Plane Operations
+
+6.6.1. `validate_synthesis(...)` shall provide preflight diagnostics and resolved-configuration preview without generating audio.
+
+6.6.2. `lint_personalities()` shall return `PersonalityLintResult`.
+
+6.6.3. `reload_personalities()` shall return `PersonalityReloadResult`.
+
+6.6.4. `get_global_synthesis_limits()` shall return published server-global operational limits for client preflight.
+
+6.6.5. When the connected server does not implement the global-limits RPC, `get_global_synthesis_limits()` shall return a typed unavailable result rather than raising a hard compatibility failure.
+
+### 6.7. Introspection
+
+6.7.1. `list_personalities()` and `describe_personality(...)` shall expose loaded personality identity and resolved-description data.
+
+6.7.2. `list_engines()` and `engine_capabilities(...)` shall expose engine identity and capability data.
 
 ---
 
-## 7. Observability Contracts
+## 7. Error Taxonomy
 
-7.1. The API shall support logger and/or callback hooks for stage lifecycle and structured events with stable stage and event-type identifiers.
+7.1. All public exceptions shall inherit from `VoxSpeakError`.
 
-7.2. Each request shall include a correlation id (`request_id`) that propagates to logs/metadata.
+7.2. The public error surface shall include structured configuration, lookup, synthesis, streaming, post-processing, cache, file-output, cancellation, and transport-mapped failures.
 
-7.3. API responses shall expose version-policy metadata that includes requested API version (if supplied), effective API version, default server version, supported versions, and policy mode.
+7.3. Errors shall include a stable error code, a human-readable message, and structured details when available.
 
----
-
-## 8. Minimal Usage Examples (Non-Normative)
-
-* In-memory:
-
-  * `result = voxspeak.synthesize("Hello", "ship_ai")`
-* Streaming:
-
-  * `handle = voxspeak.stream("Hello", "ship_ai", mode="realtime")`
-  * `for chunk in handle: play(chunk.pcm)`
-* File output (explicit opt-in):
-
-  * `result = voxspeak.synthesize("Hello", "ship_ai", output_mode="file", output_dir="./out")`
+7.4. Compatibility failures for unsupported remote API versions shall be surfaced as structured API errors.
 
 ---
 
-## 9. API Versioning and Compatibility Policy
+## 8. Observability Contracts
 
-9.1. Request-level `api_version` input may be omitted by clients.
+8.1. The API shall support stage-event callback registration and deregistration.
 
-9.2. When omitted, the server-default version shall be applied and exposed as the effective version in response metadata.
+8.2. Stage events shall include stage identity, event type, request correlation data when available, and error details for failure events.
 
-9.3. When supplied and unsupported, the API shall return a structured compatibility error that includes supported versions.
+8.3. Request identifiers shall propagate into metadata and structured events.
 
----
+8.4. The public API shall not require response DTO fields for remote API-version policy metadata.
 
-## 10. Open API Decisions
-
-10.1. Whether to provide an explicit `VoxSpeakClient` object for dependency injection.
-
-10.2. Whether async is first-class (async-only streaming) or dual-mode.
-
-10.3. Whether pseudo-streaming fallback is enabled by default or opt-in.
+8.5. Transport-visible API-version policy metadata may be exposed by the transport layer separately from public result DTOs.
 
 ---
 
-## Appendix A – Distributed Deployment Clarification (v1.1)
+## 9. Transport-Aware API Constraints
 
-A.1. VoxSpeak shall support deployment where callers, VoxSpeak itself, and downstream audio consumers run on different machines and operating systems (e.g., Windows and Ubuntu).
+9.1. The default remote client shall serialize the approved public request DTOs onto the approved protobuf schema.
 
-A.2. VoxSpeak shall support both in-process usage and out-of-process (client/server) usage without changing the conceptual synthesis or streaming semantics defined in this document.
+9.2. Transport metadata shall carry role, platform, and queue-priority inputs for remote workflows.
 
-A.3. VoxSpeak shall define at least one network-capable invocation model for transmitting text requests and audio results between machines.
-
-A.4. Audio transmitted between processes or machines shall use an explicit, OS-agnostic representation with fully specified format metadata.
-
-A.5. Streaming semantics, cancellation, safety limits, and metadata requirements remain applicable across network boundaries.
-
-A.6. This appendix is a non-breaking clarification and does not supersede any existing API contract.
+9.3. Session-based remote streaming shall remain semantically equivalent to the public streaming contract, subject to remote authorization and transport policy enforcement.
 
 ---
 
-## Appendix B – Deployment Topology Clarification (v1.2)
+## 10. Compatibility Policy
 
-B.1. VoxSpeak servers are expected to run on Ubuntu hosts.
+10.1. Request-level wire-version input may be omitted by clients using the approved transport.
 
-B.2. VoxSpeak shall support receiving text requests from:
+10.2. When omitted, the server-default wire version shall be applied.
 
-* VoxThink (Ubuntu), and/or
-* Windows clients (direct).
-
-B.3. VoxSpeak shall support streaming audio outputs to Windows clients for playback/consumption.
-
-B.4. VoxSpeak shall support scenarios where a requester and a consumer are different clients (e.g., VoxThink triggers synthesis while Windows subscribes to the resulting stream), subject to transport/session support.
-
-B.5. This appendix is a non-breaking clarification. It narrows the expected topology but does not remove support for other distributed arrangements.
-
----
-
-## Appendix C – Client Role Clarification (v1.3)
-
-C.1. VoxThink shall never be an audio consumer; it shall not receive or play VoxSpeak audio.
-
-C.2. Windows clients are the sole consumers of VoxSpeak audio streams.
-
-C.3. The API shall support a split-role workflow where a requester (e.g., VoxThink) initiates synthesis and a separate consumer (Windows client) receives the resulting audio stream.
-
-C.4. Where requester and consumer are separate clients, the API/transport shall provide a session or subscription mechanism enabling the Windows client to attach to the correct stream.
-
-C.5. This appendix is a non-breaking clarification and is authoritative for client-role constraints in the v1.x API baseline.
+10.3. When supplied and unsupported, the remote API shall fail with a structured compatibility error that identifies the supported version set.
 
 ---
 

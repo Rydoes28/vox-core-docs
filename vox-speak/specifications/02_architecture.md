@@ -1,57 +1,61 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## Architecture Specification, Version 1.4 (Approved)
+## Architecture Specification, Version 1.5 (Approved)
 
-**Document ID:** VoxSpeak-ARCH-v1.4
-**Derived from:** VoxSpeak-FR-v1.4
+**Document ID:** VoxSpeak-ARCH-v1.5
+**Derived from:** VoxSpeak-FR-v1.5
 **Project:** VoxCore
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Revision note:** VoxSpeak-ARCH-v1.4 updates architectural contracts for control-plane operations, version policy signaling, role/platform enforcement, and queue/admission semantics.
+**Revision note:** VoxSpeak-ARCH-v1.5 aligns the architectural baseline with the current public contracts for regression workflows, transport metadata policy, pseudo-stream fallback signaling, and control-plane compatibility behavior.
 
 ---
 
 ## 1. Purpose and Architectural Goals
 
-1.1. This document defines the high-level architecture for VoxSpeak, the VoxCore TTS subsystem, to satisfy VoxSpeak-FR-v1.4.
+1.1. This document defines the high-level architecture for VoxSpeak to satisfy VoxSpeak-FR-v1.5.
 
 1.2. Primary architectural goals:
 
-* Multi-engine support via stable adapter boundaries.
-* Personality-centric configuration resolving to engine/model-specific parameters.
-* Unified batch and streaming synthesis surfaces.
-* Pluggable preprocessing and post-processing pipelines.
-* Optional caching, QC, and orchestration without entangling the core.
-* Strong observability and reproducibility (metadata-first).
-* Reference-sample conditioning inputs are recorded in synthesis metadata; engine behavior remains backend-dependent and may be nondeterministic.
+* multi-engine support via stable adapter boundaries
+* personality-centric configuration resolving to engine/model-specific parameters
+* unified single-shot, batch, comparative, regression, and streaming synthesis surfaces
+* pluggable preprocessing and post-processing pipelines
+* optional caching, quality control, and orchestration without entangling the synthesis core
+* strong observability and metadata-first reproducibility review
 
 ---
 
 ## 2. System Context
 
-2.1. VoxSpeak is a library-first subsystem designed for headless operation. Optional front-ends (CLI, web/GUI) consume the same API layer.
+2.1. VoxSpeak shall be a library-first subsystem designed for headless operation.
 
-2.2. VoxSpeak integrates with:
+2.2. Optional front-ends, including CLI and GUI-oriented clients, shall consume the same public API and transport contracts.
 
-* TTS engines (Piper, Coqui) via local binaries/libraries.
-* External audio tools (FFmpeg/Sox) via a constrained invocation layer.
-* Downstream consumers via in-memory buffers, streaming, or optional file persistence.
+2.3. VoxSpeak shall integrate with:
+
+* local or embedded TTS engines
+* approved external audio-processing tools
+* downstream consumers through memory, streaming, or optional file persistence
 
 ---
 
 ## 3. Architectural Overview
 
-3.1. VoxSpeak is decomposed into the following layers:
+3.1. VoxSpeak shall be decomposed into the following layers:
 
-* API Layer
+* Public API Layer
+* Transport Layer
 * Orchestration Layer
 * Synthesis Core
-* Pipeline Layer
-* Persistence Layer (Optional)
-* Tooling / Front-Ends (Optional)
+* Text and Audio Pipeline Layer
+* Persistence and Cache Layer
+* Optional Tooling Layer
 
-3.2. Dependency direction shall flow from top to bottom; lower layers shall not import optional front-ends.
+3.2. Dependency direction shall flow from public surfaces toward execution layers.
+
+3.3. Optional tooling shall not redefine core synthesis semantics.
 
 ---
 
@@ -59,197 +63,195 @@
 
 ### 4.1. Public API Layer
 
-* Expose `synthesize()` (batch) and `stream()` (streaming) entrypoints.
-* Provide typed request/response objects.
-* Normalize error types and guarantee stable semantics.
+4.1.1. The public API layer shall expose stable contracts for single-shot synthesis, streaming, batch synthesis, comparative synthesis, regression-corpus workflows, validation, introspection, and personality governance.
 
-### 4.2. Personality Registry
+4.1.2. The public API layer shall provide typed request and result objects for in-process callers.
 
-* Load and validate personality definitions from structured config.
-* Resolve a personality into a `ResolvedVoiceProfile` for a chosen engine.
-* Provide introspection.
-* Support hot-reload (optional, feature-flagged).
+4.1.3. Transport-only concerns, including caller role, caller platform metadata, queue priority, and session-subscription authorization, shall not be required fields on the in-process `SynthesisRequest` object.
 
-### 4.3. Engine Abstraction
+### 4.2. Transport Layer
 
-* Common adapter interface implemented by each engine.
-* Capability discovery and parameter constraints.
-* Batch synthesis and streaming where possible.
+4.2.1. The transport layer shall map the approved public contracts onto the approved remote protocol.
 
-### 4.4. Text Pipeline
+4.2.2. The transport layer shall carry requester role, consumer role, requester platform, consumer platform, and queue-priority signals through transport metadata and session-oriented request fields where the wire contract requires them.
 
-* Apply per-personality preprocessing rules.
-* Validate markup for selected engine.
-* Produce engine-ready input text and an audit trail.
+4.2.3. The transport layer shall expose compatibility metadata for API-version negotiation without requiring additional fields on every response body.
 
-### 4.5. Audio Pipeline
+4.2.4. The transport layer shall support graceful degradation when communicating with older servers that do not implement the global-limits RPC.
 
-* Normalize audio into a standard internal representation.
-* Apply post-processing via internal DSP and/or external tools through a constrained runner.
-* Run optional QC checks.
+### 4.3. Personality Registry
 
-### 4.6. Orchestration
+4.3.1. The personality registry shall load, validate, lint, describe, list, and reload personality definitions from structured configuration.
 
-* Manage job lifecycle.
-* Enforce concurrency limits.
-* Provide prioritization.
-* Implement cancellation propagation.
+4.3.2. The personality registry shall resolve a personality into an engine-specific effective configuration.
 
-### 4.7. Persistence and Cache
+### 4.4. Engine Abstraction
 
-* Optional file output (off by default).
-* Metadata sidecar generation.
-* Optional caching keyed by full config.
+4.4.1. Each engine shall implement a common synthesis contract.
 
-### 4.8. Tooling and Front-Ends (Optional)
+4.4.2. Engine capability discovery shall provide routing, validation, and compatibility information.
 
-* CLI for batch and interactive use.
-* Optional web/GUI front-end, disabled by default.
-* Test harness and regression runner.
+4.4.3. Engine adapters may differ in streaming capability, markup support, and reference-sample behavior without changing the public surface.
+
+### 4.5. Text Pipeline
+
+4.5.1. The text pipeline shall apply per-personality preprocessing rules and markup validation.
+
+4.5.2. The text pipeline shall be able to emit an audit-oriented trace of text transformations.
+
+### 4.6. Audio Pipeline
+
+4.6.1. The audio pipeline shall normalize synthesis output into a standard internal audio representation.
+
+4.6.2. The audio pipeline shall support post-processing through internal or approved external stages.
+
+4.6.3. The audio pipeline shall distinguish stream-safe and buffered-only processing behavior.
+
+### 4.7. Orchestration
+
+4.7.1. The orchestration layer shall manage job lifecycle, queueing, cancellation, and admission control.
+
+4.7.2. Admission control shall support a bounded queue-priority contract with deterministic default behavior.
+
+4.7.3. The orchestration layer shall publish structured overload outcomes.
+
+4.7.4. The orchestration layer shall preserve deterministic ordering for batch-result publication even when execution is parallelized.
+
+### 4.8. Persistence and Cache
+
+4.8.1. File persistence shall remain optional.
+
+4.8.2. The persistence layer shall generate metadata sidecars when file persistence is used.
+
+4.8.3. The cache layer shall support cache hits, bypass, forced regeneration, and targeted invalidation.
+
+### 4.9. Optional Tooling Layer
+
+4.9.1. Optional tooling may expose smoke, regression, or operator workflows.
+
+4.9.2. Optional tooling shall not redefine approved public semantics.
 
 ---
 
-## 5. Data Flow
+## 5. Architectural Data Flows
 
-### 5.1. Batch Synthesis Flow (default: no file output)
+### 5.1. Single-Shot and Batch Flow
 
-1. API receives request.
-2. Personality resolved.
-3. Text preprocessing/validation.
-4. Cache check (optional).
-5. Engine synthesis → PCM buffer.
-6. Post-processing (optional).
-7. QC (optional).
-8. Return in-memory result + metadata.
-9. If file output enabled: write audio + sidecar.
+5.1.1. The architecture shall support the following ordered stages:
 
-### 5.2. Streaming Synthesis Flow (preferred when not saving)
+1. request intake and validation
+2. personality resolution
+3. text preprocessing and markup validation
+4. cache lookup when enabled
+5. engine synthesis
+6. post-processing when enabled
+7. quality-control checks when enabled
+8. result publication with metadata
+9. optional artifact persistence
 
-1. API receives streaming request.
-2. Personality resolve + text preprocessing/validation.
-3. Engine streams PCM chunks (if supported).
-4. Streaming-capable post-processing stages applied where possible.
-5. StreamHandle yields chunks.
-6. Cancellation propagates consumer → orchestration → engine.
-7. Finalize stream, emit final metadata.
+5.1.2. Batch and comparative flows shall preserve caller-visible item identity and ordering.
 
-Note: If an engine lacks native streaming, implementation may optionally pseudo-stream a full buffer; this shall be labeled accordingly.
+5.1.3. Regression-corpus flows shall expand corpus phrases in a deterministic order before batch execution.
+
+### 5.2. Streaming Flow
+
+5.2.1. The architecture shall support native streaming when the resolved engine, requested mode, and processing chain permit it.
+
+5.2.2. The architecture shall support pseudo-stream fallback when native streaming is unavailable or when buffered processing is required by policy or pipeline safety.
+
+5.2.3. Pseudo-stream fallback shall emit machine-readable warning codes that distinguish fallback causes.
+
+5.2.4. Streaming flows shall terminate with final metadata or a transport error.
 
 ---
 
 ## 6. Streaming Semantics
 
-6.1. Standard streaming output: PCM chunks with explicit framing metadata.
+6.1. Standard streaming output shall consist of framed PCM chunks plus terminal metadata.
 
-6.2. StreamHandle control surface: iteration/async iteration, cancel, status, final metadata.
+6.2. The stream-handle abstraction shall support iteration, cancellation, status inspection, and final metadata retrieval.
 
-6.3. Supported modes: real-time (paced) and fast-as-possible.
+6.3. The architecture shall support real-time and fast-as-possible streaming modes.
 
----
-
-## 7. Capability Discovery and Negotiation
-
-7.1. Engine adapters expose capabilities used for routing and validation.
-
-7.2. Personality routing rules may prefer engines based on streaming/quality.
+6.4. Streaming requests that require native streaming and cannot be satisfied shall fail explicitly rather than silently degrading.
 
 ---
 
-## 8. Caching Strategy
+## 7. Capability Discovery and Compatibility
 
-8.1. Cache keys derived from normalized text, engine/model, resolved params, post-processing params, and optional tool versions.
+7.1. Engine adapters shall expose capabilities used for routing and validation.
 
-8.2. Cache policy may be per personality and per request.
+7.2. The architecture shall expose server-global synthesis limits separately from engine-local capabilities.
 
-8.3. Cache lookup occurs after text processing and before synthesis.
+7.3. The architecture shall treat absence of the global-limits RPC on older servers as a compatibility state rather than as a malformed response.
 
----
-
-## 9. Metadata and Reproducibility
-
-9.1. VoxSpeak emits structured metadata for each synthesis regardless of output mode.
-
-9.2. Metadata includes original/processed text, resolved profile, engine/model, parameters, post-processing, QC, cache status, timings, and warnings.
+7.4. API-version policy shall be advertised through transport-visible metadata, and capability responses may include an advisory copy of that policy.
 
 ---
 
-## 10. Safety and External Tool Invocation
+## 8. Regression and Metadata Architecture
 
-10.1. External tool invocation is mediated by a runner that avoids shell evaluation, enforces allowlists, and records structured logs.
+8.1. The architecture shall support loading regression corpora from file-based or in-memory phrase sources.
+
+8.2. Regression workflows shall synthesize a deterministic phrase/personality/engine matrix.
+
+8.3. Regression metadata artifacts shall preserve stable item labels, executed matrix order, resolved personality context, and concise mismatch reporting inputs.
+
+8.4. Regression artifact diffing shall ignore approved volatile fields while preserving meaningful contract differences.
 
 ---
 
-## 11. Cross-Cutting Architectural Contracts
+## 9. Diagnostics and Observability
 
-11.1. The architecture shall provide a control-plane capability set including synthesis validation, personality linting, and personality reload operations.
+9.1. VoxSpeak shall emit structured synthesis metadata for every completed request.
 
-11.2. Control-plane operations shall return structured diagnostics with stable severity and machine-readable identifiers.
+9.2. The architecture shall support stage-oriented event publication for synthesize, stream, validate, and batch workflows.
 
-11.3. The architecture shall support explicit requester and consumer role signaling and shall enforce role-gated operations according to configured policy.
+9.3. Personality governance operations shall use a dedicated personality-diagnostic schema that is stable across lint and reload operations.
 
-11.4. The architecture shall support optional consumer platform hints and shall define validation/enforcement behavior as a deploy-time policy choice.
+9.4. Validation operations shall use a validation-diagnostic schema that is stable across preflight responses.
 
-11.5. The architecture shall include admission control with explicit request-priority semantics, deterministic default priority behavior, and structured overload outcomes.
+9.5. Warning codes shall be suitable for automated interpretation.
 
-11.6. The architecture shall emit stable lifecycle stage/event notifications for synthesize, stream, and batch workflows.
+---
 
-11.7. The architecture shall expose API version-policy metadata, including requested and effective version outcomes, across all network-visible interfaces.
+## 10. Security and Policy Enforcement
 
-11.8. When request-level version input is omitted, the architecture shall apply a documented server-defaulting rule without weakening compatibility enforcement.
+10.1. The architecture shall support requester-role and consumer-role enforcement at the transport boundary.
+
+10.2. Session subscription shall validate a session-scoped consumer token by default.
+
+10.3. The architecture may permit deployment-specific relaxation of missing-token enforcement, but supplied tokens shall still be validated.
+
+10.4. Consumer-platform hints shall be optional session-creation inputs.
+
+10.5. Platform restrictions, including Windows-only consumption, shall be deploy-time policy controls rather than unconditional architectural assumptions.
+
+---
+
+## 11. Safety and External Tool Invocation
+
+11.1. External tool invocation shall be mediated by a constrained runner that avoids shell interpretation and supports allow-list enforcement.
+
+11.2. External tool usage shall remain observable through structured diagnostics or logging.
 
 ---
 
 ## 12. Deferred Decisions
 
-12.1. Define which post-processors are stream-safe.
+12.1. The architecture may define additional stream-safe post-processors in future revisions.
 
-12.2. Decide whether pseudo-streaming fallback is enabled by default or opt-in.
+12.2. The architecture may add additional remote transports only through a formally approved transport revision.
 
-12.3. Hot-reload may be feature-flagged and/or dev-only.
-
----
-
-## Appendix A – Distributed Deployment Clarification (v1.1)
-
-A.1. VoxSpeak is expected to operate in distributed deployments where the VoxSpeak subsystem, callers, and audio consumers may run on different machines and operating systems (e.g., Windows and Ubuntu).
-
-A.2. The architectural layering and responsibilities defined in this document remain valid for both local and remote deployments.
-
-A.3. VoxSpeak shall be deployable behind a service boundary (RPC or equivalent) without altering internal module boundaries.
-
-A.4. Streaming, cancellation, safety limits, and metadata propagation shall be preserved across process and network boundaries.
-
-A.5. This appendix is a non-breaking clarification and does not supersede any existing architectural decision.
+12.3. The architecture may extend regression artifact schemas in a backward-compatible manner.
 
 ---
 
-## Appendix B – Deployment Topology Clarification (v1.2)
+## Appendix A – Distributed Deployment Clarification
 
-B.1. VoxSpeak service deployment target is Ubuntu.
+A.1. VoxSpeak shall support distributed deployments where the service, callers, and consumers operate on different hosts or operating systems.
 
-B.2. VoxThink is expected to run on Ubuntu and to call VoxSpeak as a client.
-
-B.3. A Windows host is expected to act as a client and/or an audio consumer.
-
-B.4. The architecture shall support efficient audio streaming from Ubuntu (VoxSpeak) to Windows clients.
-
-B.5. The architecture shall support multiple client roles simultaneously (e.g., VoxThink initiating synthesis while Windows consumes the resulting stream).
-
-B.6. This appendix is a non-breaking clarification. It narrows the expected topology but does not remove support for other distributed arrangements.
-
----
-
-## Appendix C – Client Role Clarification (v1.3)
-
-C.1. VoxThink shall never act as an audio consumer.
-
-C.2. The architecture shall assume Windows clients are the sole consumers of VoxSpeak audio streams.
-
-C.3. The architecture shall support a split-role interaction pattern where VoxThink initiates synthesis requests while Windows clients receive audio streams.
-
-C.4. This implies a transport/session mechanism or equivalent routing capability between requester and consumer roles.
-
-C.5. This appendix is a non-breaking clarification and is authoritative for client-role constraints in the v1.x architectural baseline.
+A.2. Distributed deployment shall not change the approved semantics for streaming, cancellation, metadata propagation, or policy enforcement.
 
 ---
 

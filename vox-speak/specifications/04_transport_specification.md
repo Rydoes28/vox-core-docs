@@ -1,206 +1,283 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## Transport and Wire Protocol Specification, Version 1.3 (Approved)
+## Transport and Wire Protocol Specification, Version 1.5 (Approved)
 
-**Document ID:** VoxSpeak-TRANSPORT-v1.3
-**Derived from:** VoxSpeak-FR-v1.4, VoxSpeak-ARCH-v1.4, VoxSpeak-API-v1.4
+**Document ID:** VoxSpeak-TRANSPORT-v1.5
+**Derived from:** VoxSpeak-FR-v1.5, VoxSpeak-ARCH-v1.5, VoxSpeak-API-v1.5
 **Project:** VoxCore
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Revision note:** VoxSpeak-TRANSPORT-v1.3 clarifies control-plane RPCs, version defaulting/advertisement, role/platform enforcement semantics, and queue/admission behavior.
+**Revision note:** VoxSpeak-TRANSPORT-v1.5 aligns the transport contract with metadata-based role signaling, required global-limits publication semantics, machine-readable pseudo-stream fallback warnings, and deploy-time authorization policy controls.
 
 ---
 
 ## 1. Purpose and Scope
 
-1.1. This document specifies how VoxSpeak APIs are exposed and consumed across process and network boundaries.
+1.1. This document specifies how VoxSpeak APIs shall be exposed and consumed across process and network boundaries.
 
 1.2. It defines:
 
-* Transport protocols
-* Message and streaming semantics
-* Wire-level audio representation
-* Cancellation and backpressure behavior
-* Version and capability negotiation
-* Security and operational requirements
+* transport protocol selection
+* remote request and streaming semantics
+* wire-level audio representation
+* cancellation and backpressure behavior
+* API-version compatibility signaling
+* role, platform, and authorization policy behavior
+* operational limit publication
 
-1.3. This document maps VoxSpeak-API-v1.4 concepts onto network transports.
+1.3. This document maps VoxSpeak-API-v1.5 concepts onto network transports.
 
 ---
 
-## 2. Deployment Topology (Authoritative)
+## 2. Deployment Topology Baseline
 
-2.1. VoxSpeak runs as a service on Ubuntu.
+2.1. VoxSpeak shall support deployment as a service on Ubuntu-class hosts.
 
-2.2. VoxThink runs on Ubuntu and may submit synthesis requests to VoxSpeak.
+2.2. VoxThink or equivalent requester services may run separately from VoxSpeak and submit synthesis requests remotely.
 
-2.3. Windows clients are the sole consumers of VoxSpeak audio streams.
+2.3. Consumer clients may be distinct from requester clients.
 
-2.4. VoxSpeak shall accept text requests originating from:
+2.4. Windows consumers shall be supported.
 
-* VoxThink (Ubuntu), and/or
-* Windows clients (direct).
-
-2.5. VoxSpeak shall stream/transport generated audio to Windows clients.
+2.5. Windows-only consumption shall be a deploy-time enforcement option rather than an unconditional baseline requirement.
 
 ---
 
 ## 3. Transport Protocol Selection
 
-3.1. VoxSpeak-TRANSPORT-v1.3 standardizes on **gRPC over HTTP/2**.
+3.1. VoxSpeak-TRANSPORT-v1.5 shall standardize on gRPC over HTTP/2.
+
+3.2. Other transports shall not be considered conformant unless approved by a later transport revision.
 
 ---
 
-## 4. Roles and Interaction Patterns
+## 4. Roles, Metadata, and Interaction Patterns
 
-4.1. The transport distinguishes two roles:
+4.1. The transport shall distinguish two actor roles:
 
-* **Requester**: submits a synthesis request (VoxThink or Windows).
-* **Consumer**: receives audio and metadata (Windows only).
+* **Requester**: submits synthesis requests and may query status or cancel sessions.
+* **Consumer**: receives streamed audio and terminal metadata.
 
-4.2. Because VoxThink is never a consumer, the transport shall support a split-role workflow where requester and consumer are different clients.
+4.2. The transport shall support split-role workflows in which requester and consumer are different clients.
 
-4.3. Role signaling shall be explicit in requests for role-gated operations.
+4.3. Role signaling for role-gated operations shall be carried in transport metadata rather than in the protobuf request body.
 
-4.4. Consumer platform hints may be provided by requesters and shall be validated or enforced according to configured server policy.
+4.4. Conformant servers shall recognize requester or consumer role metadata using the approved metadata key set:
+
+* `x-voxspeak-role`
+* `voxspeak-role`
+* `role`
+
+4.5. Role metadata values shall be normalized case-insensitively and shall support requester-capable values and consumer-capable values.
+
+4.6. Queue-priority input for remote calls shall be carried in transport metadata using the approved key set:
+
+* `x-voxspeak-priority`
+* `voxspeak-priority`
+* `priority`
+
+4.7. Queue-priority values shall be interpreted as bounded integer classes in the inclusive range `0..2`.
+
+4.8. When queue-priority metadata is omitted or invalid, the server shall apply default priority class `1`.
+
+4.9. Consumer-platform metadata may be carried using approved transport metadata keys, and requester-platform metadata may be carried independently for auditing or policy evaluation.
+
+4.10. Session-creation requests may include a consumer-platform hint in the request body for downstream subscription policy.
 
 ---
 
 ## 5. Wire-Level Audio Representation
 
-5.1. Default wire format is raw PCM frames with explicit metadata:
+5.1. The default wire format shall be raw PCM frames with explicit metadata for sample rate, channel count, and sample format.
 
-* sample rate
-* channels
-* sample format (e.g., S16LE)
-
-5.2. Each chunk includes:
+5.2. Each emitted chunk shall include:
 
 * chunk index
 * payload bytes
 * end-of-stream flag
 
-5.3. Audio compression codecs are out of scope for v1.3.
+5.3. Wire-compressed audio codecs shall remain out of scope for this baseline.
 
 ---
 
 ## 6. RPC Model
 
-### 6.1. Introspection
+### 6.1. Introspection and Control Plane
 
-6.1.1. `ListPersonalities`, `DescribePersonality`, `ListEngines`, `EngineCapabilities`.
+6.1.1. The transport baseline shall include these unary RPCs:
 
-### 6.2. Session-Based Synthesis (Required)
+* `ListPersonalities`
+* `DescribePersonality`
+* `ListEngines`
+* `EngineCapabilities`
+* `GetGlobalSynthesisLimits`
+* `ValidateSynthesis`
+* `LintPersonalities`
+* `ReloadPersonalities`
 
-6.2.1. `CreateSynthesisSession(request) -> CreateSynthesisSessionResponse`
+6.1.2. `GetGlobalSynthesisLimits` shall publish server-global admission and planning limits.
 
-6.2.2. `CreateSynthesisSessionResponse` returns:
+6.1.3. Servers that implement the approved baseline shall provide `GetGlobalSynthesisLimits`.
 
-* `session_id` (opaque)
+6.1.4. Clients communicating with older servers that return `UNIMPLEMENTED` for `GetGlobalSynthesisLimits` shall treat that outcome as a typed limits-unavailable compatibility state.
+
+### 6.2. Session-Based Synthesis
+
+6.2.1. `CreateSynthesisSession` shall create a session and return an opaque `session_id`.
+
+6.2.2. `CreateSynthesisSessionResponse` shall return:
+
+* `session_id`
 * `expires_at`
-* optional `consumer_token` (if used for authorization)
+* `consumer_token`
+* optional early metadata when available
 
-6.2.3. `SubscribeSynthesisSession(session_id, consumer_token?) -> stream StreamMessage`
+6.2.3. `SubscribeSynthesisSession` shall return a stream of `StreamMessage` values for the identified session.
 
-6.2.4. The stream emits:
+6.2.4. The stream shall emit zero or more `AudioChunk` messages followed by exactly one terminal `FinalMetadata` message, unless the stream terminates with a transport error.
 
-* zero or more `AudioChunk`
-* exactly one terminal `FinalMetadata`
+6.2.5. Requester clients shall be able to invoke `CancelSynthesisSession` and `GetSessionStatus`.
 
-6.2.5. The requester may optionally call:
+### 6.3. Direct Streaming Convenience
 
-* `CancelSynthesisSession(session_id)`
-* `GetSessionStatus(session_id)`
+6.3.1. A server may provide `StreamSynthesis` for consumers that are both requester and consumer.
 
-### 6.3. Convenience: Direct Streaming (Optional)
+6.3.2. When provided, `StreamSynthesis` shall be semantically equivalent to creating a session and immediately subscribing to it.
 
-6.3.1. For cases where the Windows client is both requester and consumer, a direct streaming RPC may be provided:
-
-* `StreamSynthesis(request) -> stream StreamMessage`
-
-6.3.2. If provided, it shall be semantically equivalent to creating a session and immediately subscribing.
-
-
-### 6.4. Control-Plane Operations (Required)
-
-6.4.1. `ValidateSynthesis(request) -> ValidateSynthesisResponse` shall return preflight diagnostics and resolved configuration preview without emitting audio.
-
-6.4.2. `LintPersonalities(request) -> LintPersonalitiesResponse` shall return structured diagnostics for loaded personality definitions.
-
-6.4.3. `ReloadPersonalities(request) -> ReloadPersonalitiesResponse` shall return reload outcome status and diagnostics.
+6.3.3. `StreamSynthesis` shall require streaming output semantics and shall reject file-output-only request shapes.
 
 ---
 
 ## 7. Streaming Semantics
 
-7.1. Chunk emission respects gRPC backpressure.
+7.1. Chunk emission shall respect gRPC backpressure.
 
-7.2. `StreamMode` behavior:
+7.2. `REALTIME` mode shall emit paced chunks.
 
-* REALTIME: paced emission
-* FAST_AS_POSSIBLE: emit ASAP
+7.3. `FAST_AS_POSSIBLE` mode shall emit chunks as quickly as practical.
 
-7.3. Terminal metadata marks completion.
+7.4. Terminal metadata shall mark stream completion.
 
-7.4. Pseudo-streaming (buffer-then-chunk) may be used only when native streaming is unavailable and shall be flagged in metadata warnings.
+7.5. Pseudo-stream fallback may be used whenever native streaming cannot be used or when the effective processing path requires buffering before chunk emission.
 
----
+7.6. Pseudo-stream fallback shall be signaled using in-band `StreamWarning` messages and duplicated warning codes in terminal metadata.
 
-## 8. Cancellation and Lifetime
+7.7. Pseudo-stream fallback signaling shall include the general warning code `PSEUDO_STREAMING_BUFFER_THEN_CHUNK`.
 
-8.1. Client-side stream cancellation cancels the subscription.
+7.8. Pseudo-stream fallback signaling shall also include reason-specific warning codes when applicable, including:
 
-8.2. Requester-initiated cancellation (CancelSynthesisSession) shall terminate synthesis best-effort.
+* `PSEUDO_STREAMING_ENGINE_CAPABILITY_FALLBACK`
+* `PSEUDO_STREAMING_RUNTIME_UNAVAILABLE_FALLBACK`
+* `PSEUDO_STREAMING_SERVER_FALLBACK`
+* `PSEUDO_STREAMING_FILE_OUTPUT_FALLBACK`
+* `PSEUDO_STREAMING_POSTPROCESSING_FALLBACK`
 
-8.3. Sessions shall have a TTL; expiration terminates synthesis/subscription and releases resources.
-
-8.4. Request admission shall apply explicit priority semantics; when priority is omitted, the documented default priority shall be applied.
-
----
-
-## 9. Versioning and Capability Negotiation
-
-9.1. Requests may include `api_version` (e.g., `1.4`).
-
-9.1.1. If `api_version` is omitted, the server shall apply its default API version and report the effective version in response metadata.
-
-9.2. Server publishes:
-
-* supported versions and policy mode
-* default and effective API version metadata
-* supported audio formats
-* exposed operational limits defined by wire contracts (for example max text length, concurrency)
+7.9. When a requested stream mode requires native streaming and the server cannot satisfy that requirement, the call shall fail with a structured argument or validation error instead of silently using pseudo-streaming.
 
 ---
 
-## 10. Error Mapping
+## 8. Cancellation, Session Lifetime, and Status
 
-10.1. VoxSpeak errors map to gRPC status codes and include structured details.
+8.1. Client-side subscription cancellation shall cancel the active subscription.
 
-10.2. Cancellation maps to `CANCELLED`.
+8.2. Requester-initiated cancellation shall terminate synthesis on a best-effort basis.
 
-10.3. Overload and admission-control rejections shall map to structured resource/capacity errors and shall include retry guidance when available.
+8.3. Sessions shall have a time-to-live and shall expire when that lifetime is exceeded.
 
----
+8.4. `GetSessionStatus` shall report at least session state and best-effort progress percentage.
 
-## 11. Security Requirements
-
-11.1. TLS supported.
-
-11.2. Authentication supported via interceptors (token, mTLS).
-
-11.3. Session subscription authorization may use a scoped `consumer_token` returned at session creation.
+8.5. When final metadata is available, `GetSessionStatus` may return it.
 
 ---
 
-## 12. Operational Considerations
+## 9. Admission Control and Published Limits
 
-12.1. Configurable timeouts: connection, request processing, subscription idle.
+9.1. Admission control shall apply explicit queue-priority semantics.
 
-12.2. Structured logging includes request_id and session_id.
+9.2. Overload rejections shall map to `RESOURCE_EXHAUSTED` and shall include structured reason details when available.
 
-12.3. Metrics shall include request/error counts, latency, active sessions, stream durations, and admission outcomes by priority class.
+9.3. The published global-limits contract shall include, at minimum:
+
+* maximum synthesis duration in milliseconds
+* global maximum concurrent jobs
+* global maximum queued jobs
+* per-engine maximum concurrent jobs
+* per-engine maximum queued jobs
+
+9.4. Published limit values shall represent effective server policy values for the connected server instance.
+
+9.5. A maximum synthesis duration value of `0` shall mean that no explicit duration cap is published.
+
+---
+
+## 10. API-Version Compatibility Signaling
+
+10.1. Requests may include `header.api_version`.
+
+10.2. When `header.api_version` is omitted, the server shall apply its default wire version.
+
+10.3. Unsupported request versions shall be rejected with `INVALID_ARGUMENT` and structured details identifying the requested version, the supported versions, and the default version.
+
+10.4. Version-policy advertisement shall be published through gRPC initial metadata.
+
+10.5. Conformant servers shall publish, at minimum, the following metadata keys when initial metadata is available:
+
+* `x-voxspeak-api-default-version`
+* `x-voxspeak-api-supported-versions`
+* `x-voxspeak-api-policy-mode`
+* `x-voxspeak-api-version-policy`
+
+10.6. When applicable, servers shall also publish:
+
+* `x-voxspeak-api-effective-version`
+* `x-voxspeak-api-requested-version`
+
+10.7. `EngineCapabilities` responses may include an advisory copy of API-version policy metadata inside the flexible capability payload.
+
+---
+
+## 11. Error Mapping
+
+11.1. VoxSpeak domain errors shall map to gRPC status codes and may include structured details.
+
+11.2. Cancellation shall map to `CANCELLED`.
+
+11.3. Unknown sessions shall map to `NOT_FOUND`.
+
+11.4. Role, token, and platform authorization failures shall map to `PERMISSION_DENIED`.
+
+11.5. Invalid request shapes or unsupported version requests shall map to `INVALID_ARGUMENT` unless a more specific status is required.
+
+---
+
+## 12. Security and Authorization Requirements
+
+12.1. TLS shall be supported.
+
+12.2. Authentication may be layered through interceptors, including token- or mTLS-based approaches.
+
+12.3. Session subscription authorization shall use a session-scoped `consumer_token`.
+
+12.4. Missing `consumer_token` input shall be rejected by default for subscription calls.
+
+12.5. Deployments may permit subscription without a token as an explicit policy override.
+
+12.6. When a token is provided and does not match the session token, the subscription shall be rejected.
+
+12.7. Consumer-platform enforcement shall be optional and policy-driven.
+
+12.8. When consumer-platform enforcement is enabled for a session and the subscriber platform is absent or mismatched, the subscription shall be rejected.
+
+---
+
+## 13. Operational Considerations
+
+13.1. Transport configuration shall support connection, unary-request, and stream-idle timeouts.
+
+13.2. Structured logging shall include request identifiers and session identifiers when available.
+
+13.3. Metrics shall include request counts, error counts, latency, active sessions, stream durations, and admission outcomes by queue-priority class.
 
 ---
 

@@ -1,31 +1,35 @@
 # VoxCore – VoxSpeak TTS Subsystem
 
-## Protobuf Definitions, Version 1.1 (Approved)
+## Protobuf Definitions, Version 1.2 (Approved)
 
-**Document ID:** VoxSpeak-PROTO-v1.1  
-**Derived from:** VoxSpeak-TRANSPORT-v1.3 (Approved), VoxSpeak-API-v1.4 (Approved)  
-**Project:** VoxCore  
-**Subsystem:** VoxSpeak (`vox-speak`)  
+**Document ID:** VoxSpeak-PROTO-v1.2
+**Derived from:** VoxSpeak-TRANSPORT-v1.5 (Approved), VoxSpeak-API-v1.5 (Approved)
+**Project:** VoxCore
+**Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Approval note:** This document is approved as-is.
+**Revision note:** VoxSpeak-PROTO-v1.2 re-baselines the documented protobuf schema to the shipped `voxspeak/v1/voxspeak.proto` contract and normalizes transport-only semantics that are carried outside protobuf bodies.
 
 ---
 
 ## 1. Scope
 
-1.1. This document defines the `.proto` schema baseline for the VoxSpeak gRPC transport.
+1.1. This document defines the approved `.proto` schema baseline for the VoxSpeak gRPC transport.
 
-1.2. It expresses:
-- Session-based synthesis (required)
-- Streaming subscription (Windows consumer)
-- Control-plane validation and personality-governance RPCs
-- Introspection RPCs
-- Core message types for requests, reproducibility controls, audio chunks, metadata, and errors
+1.2. The protobuf schema shall define:
+
+* session-based synthesis
+* streaming subscription and warnings
+* control-plane validation and personality governance RPCs
+* personality and engine introspection RPCs
+* global-limits publication RPCs
+* request, metadata, and error payloads required by the approved transport baseline
+
+1.3. Role signaling, queue-priority signaling, and API-version policy advertisement shall be treated as transport-level metadata contracts unless a field is explicitly present in the schema below.
 
 ---
 
-## 2. Protobuf File: `voxspeak/v1/voxspeak.proto`
+## 2. Authoritative Protobuf File: `voxspeak/v1/voxspeak.proto`
 
 ```proto
 syntax = "proto3";
@@ -41,13 +45,6 @@ option go_package = "voxspeak/v1;voxspeakv1";
 // Transport baseline: VoxSpeak-TRANSPORT-v1.3 (Approved).
 service VoxSpeakService {
   // ----------------------
-  // Control-plane
-  // ----------------------
-  rpc ValidateSynthesis(ValidateSynthesisRequest) returns (ValidateSynthesisResponse);
-  rpc LintPersonalities(LintPersonalitiesRequest) returns (LintPersonalitiesResponse);
-  rpc ReloadPersonalities(ReloadPersonalitiesRequest) returns (ReloadPersonalitiesResponse);
-
-  // ----------------------
   // Introspection
   // ----------------------
   rpc ListPersonalities(ListPersonalitiesRequest) returns (ListPersonalitiesResponse);
@@ -57,6 +54,13 @@ service VoxSpeakService {
   rpc EngineCapabilities(EngineCapabilitiesRequest) returns (EngineCapabilitiesResponse);
   // Publish server-global planning/admission limits for client preflight.
   rpc GetGlobalSynthesisLimits(GetGlobalSynthesisLimitsRequest) returns (GetGlobalSynthesisLimitsResponse);
+  rpc ValidateSynthesis(ValidateSynthesisRequest) returns (ValidateSynthesisResponse);
+
+  // Lint personality configuration files and return structured diagnostics.
+  rpc LintPersonalities(LintPersonalitiesRequest) returns (LintPersonalitiesResponse);
+
+  // Reload personality configuration files and report reload/lint outcomes.
+  rpc ReloadPersonalities(ReloadPersonalitiesRequest) returns (ReloadPersonalitiesResponse);
 
   // ----------------------
   // Session-based synthesis (required)
@@ -84,11 +88,8 @@ message RequestHeader {
   // Caller-supplied correlation id; if empty, server may generate.
   string request_id = 1;
 
-  // Client API/protocol version (e.g., "1.4"). Optional.
+  // Client API/protocol version (e.g., "1.3").
   string api_version = 2;
-
-  // Optional requester role hint (e.g., "voxthink", "windows").
-  string requester_role = 3;
 }
 
 message ResponseHeader {
@@ -100,12 +101,6 @@ message ResponseHeader {
 
   // Server implementation identifier (optional).
   string server_id = 3;
-
-  // Version-policy metadata for negotiation transparency.
-  string default_api_version = 4;
-  repeated string supported_api_versions = 5;
-  string version_policy_mode = 6;
-  string effective_api_version = 7;
 }
 
 // ----------------------
@@ -206,11 +201,6 @@ message FileOutputOptions {
   string container = 4;    // e.g., "wav", "flac"
 }
 
-message ReproducibilityOptions {
-  int64 seed = 1;
-  google.protobuf.Struct flags = 2;
-}
-
 message SynthesisRequest {
   // Raw text to synthesize.
   string text = 1;
@@ -231,17 +221,17 @@ message SynthesisRequest {
 
   CachePolicy cache_policy = 8;
 
-  // Optional reproducibility controls; server applies best-effort semantics.
-  ReproducibilityOptions reproducibility = 11;
-
-  // Optional queue-priority class; server applies default when omitted.
-  string priority = 12;
-
   // Required iff output_mode == OUTPUT_MODE_FILE.
   FileOutputOptions file_output = 9;
 
   // Required iff output_mode == OUTPUT_MODE_STREAM.
   StreamOptions stream_options = 10;
+
+  // Optional deterministic seed forwarded to engines when supported.
+  optional int64 seed = 11;
+
+  // Optional engine-specific reproducibility flags.
+  google.protobuf.Struct reproducibility_flags = 12;
 
   // Optional request-level override for verbose/debug trace logging; when unset, server/client defaults apply.
   optional bool verbose_debug_logging = 13;
@@ -301,31 +291,27 @@ message SynthesisMetadata {
   // e.g., pseudo-streaming fallback.
   repeated string warnings = 12;
 
-  // Optional preprocessing trace for diagnostics/reproducibility audits.
+  // Detailed text-preprocessing trace for debugging and diagnostics.
   repeated TextProcessingTraceEntry text_processing_trace = 13;
-
-  // Requested and effective reproducibility settings.
-  ReproducibilityOptions requested_reproducibility = 14;
-  ReproducibilityOptions effective_reproducibility = 15;
-  bool reproducibility_fully_supported = 16;
 }
 
 // ----------------------
-// Control-plane RPCs
+// Validation RPC
 // ----------------------
-
-enum DiagnosticSeverity {
-  DIAGNOSTIC_SEVERITY_UNSPECIFIED = 0;
-  DIAGNOSTIC_SEVERITY_INFO = 1;
-  DIAGNOSTIC_SEVERITY_WARNING = 2;
-  DIAGNOSTIC_SEVERITY_ERROR = 3;
-}
 
 message ValidationDiagnostic {
-  DiagnosticSeverity severity = 1;
+  enum Severity {
+    SEVERITY_UNSPECIFIED = 0;
+    SEVERITY_INFO = 1;
+    SEVERITY_WARNING = 2;
+    SEVERITY_ERROR = 3;
+  }
+
+  Severity severity = 1;
   string code = 2;
   string message = 3;
-  google.protobuf.Struct details = 4;
+  string field = 4;
+  google.protobuf.Struct details = 5;
 }
 
 message ValidateSynthesisRequest {
@@ -340,23 +326,49 @@ message ValidateSynthesisResponse {
   google.protobuf.Struct resolved_config = 4;
 }
 
+// Structured personality lint/reload diagnostic emitted by control-plane APIs.
+message PersonalityDiagnostic {
+  enum Severity {
+    SEVERITY_UNSPECIFIED = 0;
+    SEVERITY_INFO = 1;
+    SEVERITY_WARNING = 2;
+    SEVERITY_ERROR = 3;
+  }
+
+  Severity severity = 1;
+  string path = 2;
+  string message = 3;
+  string suggestion = 4;
+  string code = 5;
+}
+
+// Request envelope for personality linting.
 message LintPersonalitiesRequest {
   RequestHeader header = 1;
 }
 
+// Lint report with diagnostics and discovered config metadata.
 message LintPersonalitiesResponse {
   ResponseHeader header = 1;
-  repeated ValidationDiagnostic diagnostics = 2;
+  bool ok = 2;
+  repeated PersonalityDiagnostic diagnostics = 3;
+  repeated string discovered_files = 4;
+  repeated string discovered_personality_ids = 5;
 }
 
+// Request envelope for personality registry reload.
 message ReloadPersonalitiesRequest {
   RequestHeader header = 1;
 }
 
+// Reload report with diagnostics, discovery metadata, and reload state.
 message ReloadPersonalitiesResponse {
   ResponseHeader header = 1;
-  bool reloaded = 2;
-  repeated ValidationDiagnostic diagnostics = 3;
+  bool ok = 2;
+  bool reloaded = 3;
+  repeated PersonalityDiagnostic diagnostics = 4;
+  repeated string discovered_files = 5;
+  repeated string discovered_personality_ids = 6;
 }
 
 // ----------------------
@@ -370,11 +382,8 @@ message CreateSynthesisSessionRequest {
   // Server may override or validate.
   SynthesisRequest request = 2;
 
-  // Optional: declare intended consumer platform.
+  // Optional: declare intended consumer platform (diagnostics/routing only).
   string consumer_platform = 3; // e.g., "windows"
-
-  // Optional: declare intended consumer role; server may enforce policy.
-  string consumer_role = 4;
 }
 
 message CreateSynthesisSessionResponse {
@@ -545,13 +554,29 @@ message EngineCapabilities {
 
 ---
 
-## 3. Notes and Expected Follow-ons
+## 3. Normative Interpretation Notes
 
-3.1. gRPC error mapping (status codes + rich details) should be implemented using standard gRPC status details; this schema includes `StreamWarning` only for non-fatal in-band warnings.
+3.1. `RequestHeader` shall contain only `request_id` and `api_version` in the current schema baseline.
 
-3.2. If you later introduce an audio codec on the wire (e.g., Opus), add a `Codec` enum and codec-specific payloads under `AudioChunk` with version gating.
+3.2. `ResponseHeader` shall contain only `request_id`, `api_version`, and `server_id` in the current schema baseline.
 
-3.3. Authentication can be layered using gRPC interceptors; `consumer_token` is optional and intended for session-scoped authorization.
+3.3. Version-policy advertisement shall occur through transport metadata rather than through additional `ResponseHeader` fields.
+
+3.4. `SynthesisRequest` shall carry reproducibility inputs as optional `seed` and `reproducibility_flags` fields.
+
+3.5. The current schema shall not require request-body fields for requester role, consumer role, or queue priority.
+
+3.6. `CreateSynthesisSessionRequest` shall carry `consumer_platform` as an optional session hint and shall not require a `consumer_role` field.
+
+3.7. `SynthesisMetadata` shall include warning codes and optional text-processing trace entries, and shall not require requested-versus-effective reproducibility outcome fields in the current baseline.
+
+3.8. `LintPersonalitiesResponse` and `ReloadPersonalitiesResponse` shall use the dedicated `PersonalityDiagnostic` schema.
+
+3.9. `GetGlobalSynthesisLimitsResponse` shall publish server-global policy values through `GlobalSynthesisLimits`.
+
+3.10. Compatibility handling for older servers that do not implement `GetGlobalSynthesisLimits` shall be defined by the API and transport specifications rather than by schema changes to this file.
+
+3.11. `consumer_token` shall be treated as the session-scoped subscription authorization field for the current schema baseline.
 
 ---
 
