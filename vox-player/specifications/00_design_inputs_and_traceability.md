@@ -169,7 +169,7 @@ This section records concrete details verified directly from the shipped impleme
 
 ### 3.1 RPC and message details confirmed by proto/service code
 
-- Service name: `voxspeak.v1.VoxSpeakService`.
+- Service name: `voxcore.speech.v1.SpeechService`.
 - Required synthesis baseline RPCs:
   - `CreateSynthesisSession`
   - `SubscribeSynthesisSession`

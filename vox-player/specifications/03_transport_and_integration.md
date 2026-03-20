@@ -34,7 +34,7 @@
 
 ## 2. Verified Source Baseline
 
-2.1. The verified current remote service is `voxspeak.v1.VoxSpeakService` as defined in `vox-speak/proto/voxspeak/v1/voxspeak.proto` and implemented in `vox-speak/server/voxspeak_server/service.py`.
+2.1. The verified current remote service is `voxcore.speech.v1.SpeechService` as defined in `proto/voxcore/speech/v1/speech.proto` and implemented in `vox-speak/server/voxspeak_server/service.py`.
 
 2.2. The verified current client-side reference behavior is the shipped Python gRPC transport client in `vox-speak/server/voxspeak/transport_grpc.py`.
 
@@ -56,7 +56,7 @@
 
 3.1.1. VoxPlayer shall integrate with VoxSpeak using **gRPC over HTTP/2** only.
 
-3.1.2. The authoritative service name is `voxspeak.v1.VoxSpeakService`.
+3.1.2. The authoritative service name is `voxcore.speech.v1.SpeechService`.
 
 3.1.3. VoxPlayer shall not assume any verified REST, WebSocket, named-pipe, or custom socket transport for VoxSpeak.
 
@@ -546,7 +546,7 @@
 
 11.2.1. The direct VoxSpeak adapter shall own all knowledge of:
 
-* `voxspeak_pb2` and `voxspeak_pb2_grpc`,
+* `speech_pb2` and `speech_pb2_grpc`,
 * gRPC metadata key names,
 * `consumer_token`,
 * `session_id`,
@@ -682,7 +682,7 @@ The following remain intentionally undefined for this revision:
 
 ## 16. Key Verified Interfaces
 
-16.1. Service: `voxspeak.v1.VoxSpeakService`
+16.1. Service: `voxcore.speech.v1.SpeechService`
 
 16.2. Required baseline RPCs:
 

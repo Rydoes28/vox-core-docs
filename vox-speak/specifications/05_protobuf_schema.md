@@ -8,7 +8,7 @@
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Revision note:** VoxSpeak-PROTO-v1.2 re-baselines the documented protobuf schema to the shipped `voxspeak/v1/voxspeak.proto` contract, including the operator-facing runtime-metrics RPC, and normalizes transport-only semantics that are carried outside protobuf bodies.
+**Revision note:** VoxSpeak-PROTO-v1.2 re-baselines the documented protobuf schema to the shipped `voxcore/speech/v1/speech.proto` contract, including the operator-facing runtime-metrics RPC, and normalizes transport-only semantics that are carried outside protobuf bodies.
 
 ---
 
@@ -29,21 +29,21 @@
 
 ---
 
-## 2. Authoritative Protobuf File: `voxspeak/v1/voxspeak.proto`
+## 2. Authoritative Protobuf File: `voxcore/speech/v1/speech.proto`
 
 ```proto
 syntax = "proto3";
 
-package voxspeak.v1;
+package voxcore.speech.v1;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 
-option go_package = "voxspeak/v1;voxspeakv1";
+option go_package = "voxcore/speech/v1;speechv1";
 
-// VoxSpeakService exposes the VoxSpeak subsystem over gRPC.
+// SpeechService exposes the shared speech synthesis contract over gRPC.
 // Transport baseline: VoxSpeak-TRANSPORT-v1.5 (Approved).
-service VoxSpeakService {
+service SpeechService {
   // ----------------------
   // Introspection
   // ----------------------

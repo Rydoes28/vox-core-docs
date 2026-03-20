@@ -155,7 +155,7 @@ Playback  Persistence  Diagnostics  Route Abstractions
 
 4.3.4. The transport layer shall be the only layer that knows about:
 
-* generated `voxspeak_pb2` / `voxspeak_pb2_grpc` types,
+* generated `speech_pb2` / `speech_pb2_grpc` types,
 * gRPC metadata keys,
 * gRPC status codes,
 * session `consumer_token`,
