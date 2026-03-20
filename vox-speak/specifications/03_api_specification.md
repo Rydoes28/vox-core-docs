@@ -28,6 +28,7 @@
 * validation and personality governance
 * personality and engine introspection
 * global-limits introspection
+* transport-only deployed-operator runtime-metrics export semantics
 * observability hooks and error contracts
 
 ---
@@ -276,6 +277,10 @@
 
 6.6.5. When the connected server does not implement the global-limits RPC, `get_global_synthesis_limits()` shall return a typed unavailable result rather than raising a hard compatibility failure.
 
+6.6.6. The current public `voxspeak` package surface shall not require a `get_runtime_metrics()` function or a typed public runtime-metrics DTO.
+
+6.6.7. Deployed runtime-metrics retrieval shall remain a transport/operator RPC (`GetRuntimeMetrics`) rather than a required public package entry point in the current API baseline.
+
 ### 6.7. Introspection
 
 6.7.1. `list_personalities()` and `describe_personality(...)` shall expose loaded personality identity and resolved-description data.
@@ -317,6 +322,8 @@
 9.2. Transport metadata shall carry role, platform, and queue-priority inputs for remote workflows.
 
 9.3. Session-based remote streaming shall remain semantically equivalent to the public streaming contract, subject to remote authorization and transport policy enforcement.
+
+9.4. Transport control-plane RPCs may include deployed-operator surfaces such as `GetRuntimeMetrics` that are not required functions on the current public `voxspeak` package surface.
 
 ---
 

@@ -8,7 +8,7 @@
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Revision note:** VoxSpeak-TRANSPORT-v1.5 aligns the transport contract with metadata-based role signaling, required global-limits publication semantics, machine-readable pseudo-stream fallback warnings, and deploy-time authorization policy controls.
+**Revision note:** VoxSpeak-TRANSPORT-v1.5 aligns the transport contract with metadata-based role signaling, required control-plane publication semantics for global limits and runtime metrics, machine-readable pseudo-stream fallback warnings, and deploy-time authorization policy controls.
 
 ---
 
@@ -25,6 +25,7 @@
 * API-version compatibility signaling
 * role, platform, and authorization policy behavior
 * operational limit publication
+* runtime-metrics publication for deployed operators
 
 1.3. This document maps VoxSpeak-API-v1.5 concepts onto network transports.
 
@@ -112,15 +113,24 @@
 * `ListEngines`
 * `EngineCapabilities`
 * `GetGlobalSynthesisLimits`
+* `GetRuntimeMetrics`
 * `ValidateSynthesis`
 * `LintPersonalities`
 * `ReloadPersonalities`
 
 6.1.2. `GetGlobalSynthesisLimits` shall publish server-global admission and planning limits.
 
-6.1.3. Servers that implement the approved baseline shall provide `GetGlobalSynthesisLimits`.
+6.1.3. `GetRuntimeMetrics` shall publish a stable operator-facing snapshot of live runtime metrics for the connected server instance.
 
-6.1.4. Clients communicating with older servers that return `UNIMPLEMENTED` for `GetGlobalSynthesisLimits` shall treat that outcome as a typed limits-unavailable compatibility state.
+6.1.4. The runtime-metrics snapshot shall include request aggregates, stream-duration data, active-session visibility, and queue-priority admission outcomes required by the transport metrics baseline.
+
+6.1.5. `GetRuntimeMetrics` may support reset semantics so operators can begin a new metrics epoch without restarting the process; any reset behavior shall preserve visibility for active sessions.
+
+6.1.6. Servers that implement the approved baseline shall provide `GetGlobalSynthesisLimits` and `GetRuntimeMetrics`.
+
+6.1.7. Clients communicating with older servers that return `UNIMPLEMENTED` for `GetGlobalSynthesisLimits` shall treat that outcome as a typed limits-unavailable compatibility state.
+
+6.1.8. Clients communicating with older servers that return `UNIMPLEMENTED` for `GetRuntimeMetrics` shall treat that outcome as a typed metrics-unavailable compatibility state rather than as a malformed runtime-metrics response.
 
 ### 6.2. Session-Based Synthesis
 

@@ -8,7 +8,7 @@
 **Subsystem:** VoxSpeak (`vox-speak`)
 **Status:** Approved
 
-**Revision note:** VoxSpeak-PROTO-v1.2 re-baselines the documented protobuf schema to the shipped `voxspeak/v1/voxspeak.proto` contract and normalizes transport-only semantics that are carried outside protobuf bodies.
+**Revision note:** VoxSpeak-PROTO-v1.2 re-baselines the documented protobuf schema to the shipped `voxspeak/v1/voxspeak.proto` contract, including the operator-facing runtime-metrics RPC, and normalizes transport-only semantics that are carried outside protobuf bodies.
 
 ---
 
@@ -22,7 +22,7 @@
 * streaming subscription and warnings
 * control-plane validation and personality governance RPCs
 * personality and engine introspection RPCs
-* global-limits publication RPCs
+* global-limits and runtime-metrics publication RPCs
 * request, metadata, and error payloads required by the approved transport baseline
 
 1.3. Role signaling, queue-priority signaling, and API-version policy advertisement shall be treated as transport-level metadata contracts unless a field is explicitly present in the schema below.
@@ -42,7 +42,7 @@ import "google/protobuf/struct.proto";
 option go_package = "voxspeak/v1;voxspeakv1";
 
 // VoxSpeakService exposes the VoxSpeak subsystem over gRPC.
-// Transport baseline: VoxSpeak-TRANSPORT-v1.3 (Approved).
+// Transport baseline: VoxSpeak-TRANSPORT-v1.5 (Approved).
 service VoxSpeakService {
   // ----------------------
   // Introspection
@@ -54,6 +54,8 @@ service VoxSpeakService {
   rpc EngineCapabilities(EngineCapabilitiesRequest) returns (EngineCapabilitiesResponse);
   // Publish server-global planning/admission limits for client preflight.
   rpc GetGlobalSynthesisLimits(GetGlobalSynthesisLimitsRequest) returns (GetGlobalSynthesisLimitsResponse);
+  // Publish stable runtime metrics snapshots for deployed operators.
+  rpc GetRuntimeMetrics(GetRuntimeMetricsRequest) returns (GetRuntimeMetricsResponse);
   rpc ValidateSynthesis(ValidateSynthesisRequest) returns (ValidateSynthesisResponse);
 
   // Lint personality configuration files and return structured diagnostics.
@@ -518,6 +520,15 @@ message GetGlobalSynthesisLimitsRequest {
   RequestHeader header = 1;
 }
 
+// Request a stable operator-facing runtime metrics snapshot from the running server.
+message GetRuntimeMetricsRequest {
+  RequestHeader header = 1;
+
+  // When true, export the current snapshot and then begin a new metrics epoch
+  // while preserving visibility for any active sessions.
+  bool reset = 2;
+}
+
 // Published server-global limits. These values are not engine-local capability fields.
 message GlobalSynthesisLimits {
   int32 max_synthesis_duration_ms = 1;
@@ -531,6 +542,16 @@ message GlobalSynthesisLimits {
 message GetGlobalSynthesisLimitsResponse {
   ResponseHeader header = 1;
   GlobalSynthesisLimits limits = 2;
+}
+
+// Response envelope for stable operator-facing runtime metrics snapshots.
+message GetRuntimeMetricsResponse {
+  ResponseHeader header = 1;
+
+  // UTF-8 JSON payload mirroring the stable runtime_metrics() snapshot
+  // exported by the running service instance without coercing integer-valued
+  // fields to floating-point numbers.
+  string metrics_json = 2;
 }
 
 message EngineCapabilities {
@@ -574,9 +595,11 @@ message EngineCapabilities {
 
 3.9. `GetGlobalSynthesisLimitsResponse` shall publish server-global policy values through `GlobalSynthesisLimits`.
 
-3.10. Compatibility handling for older servers that do not implement `GetGlobalSynthesisLimits` shall be defined by the API and transport specifications rather than by schema changes to this file.
+3.10. `GetRuntimeMetricsResponse.metrics_json` shall carry the stable operator snapshot as UTF-8 JSON so integer-valued fields remain integers after decoding, with `schema_version` inside the payload governing snapshot interpretation.
 
-3.11. `consumer_token` shall be treated as the session-scoped subscription authorization field for the current schema baseline.
+3.11. Compatibility handling for older servers that do not implement `GetGlobalSynthesisLimits` or `GetRuntimeMetrics` shall be defined by the API and transport specifications rather than by schema changes to this file.
+
+3.12. `consumer_token` shall be treated as the session-scoped subscription authorization field for the current schema baseline.
 
 ---
 
