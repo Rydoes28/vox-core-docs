@@ -131,6 +131,12 @@
 
 4.9.2. Optional tooling shall not redefine approved public semantics.
 
+4.9.3. Optional managed external-engine processes, such as a local Fish Speech HTTP
+server, shall be process-scoped lifecycle dependencies. They shall be opt-in,
+started before serving dependent synthesis requests, health-checked before use,
+and stopped during VoxSpeak shutdown. Engine adapters shall still consume stable
+client configuration and shall not start external engines per synthesis request.
+
 ---
 
 ## 5. Architectural Data Flows
