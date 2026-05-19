@@ -14,7 +14,7 @@
 
 ## 1. Scope and Objectives
 
-1.1. The system shall provide a modular TTS subsystem capable of generating speech from text using multiple backends, including Piper and Coqui TTS.
+1.1. The system shall provide a modular TTS subsystem capable of generating speech from text using multiple backends, including Piper, Coqui TTS, Fish Speech, and Chatterbox-Turbo.
 
 1.2. The subsystem shall support multiple personalities, where each personality defines a coherent voice profile, model choice, and audio-processing configuration.
 
@@ -30,6 +30,8 @@
 
 * Piper TTS
 * Coqui TTS
+* Fish Speech
+* Chatterbox-Turbo
 
 2.2. The system shall allow configuration of one or more models per engine.
 
